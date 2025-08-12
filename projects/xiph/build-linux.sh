@@ -1,5 +1,5 @@
 # Install dependencies
-apt-get install -y build-essential git autoconf automake libtool libtool-bin gettext pkg-config
+sudo apt-get install -y build-essential git autoconf automake libtool libtool-bin gettext pkg-config
 
 # Build libogg
 git clone https://github.com/xiph/ogg.git --branch "$TAG_OGG" --single-branch
