@@ -1,5 +1,5 @@
 # ruff: noqa: F405 F403
-from .meta import *
+from meta import *
 import platform
 import zipfile
 
