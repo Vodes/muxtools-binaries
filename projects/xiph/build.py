@@ -24,4 +24,4 @@ if "x86" in platform.machine().lower():
 
 commands = ["chmod u+x build-linux.sh", "./build-linux.sh"]
 for cmd in commands:
-    subprocess.run(commands, shell=True, check=True, encoding="utf-8", env=env, cwd=cwd)
+    subprocess.run(cmd, shell=True, check=True, encoding="utf-8", env=env, cwd=cwd)

@@ -1,0 +1,18 @@
+name: Run builds
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Run builds
+        run: uv run run-builds.py
