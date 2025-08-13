@@ -1,6 +1,7 @@
 from pathlib import Path
 import os
 import platform
+from utils import run_cmd as rncmd
 
 cwd = Path(__file__).parent
 
@@ -36,3 +37,7 @@ opus_zip.parent.mkdir(exist_ok=True, parents=True)
 
 flac_zip = out_dir / "flac" / f"flac-{env['FLAC_VERSION_NAME']}-{platform.system().lower()}-{platform.machine().lower()}.zip"
 flac_zip.parent.mkdir(exist_ok=True, parents=True)
+
+
+def run_cmd(cmd: str, check: bool = True):
+    rncmd(cmd, check, env, cwd)

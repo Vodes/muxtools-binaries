@@ -2,7 +2,7 @@
 from meta import *
 import zipfile
 import json
-from utils import check_version_exists, run_cmd
+from utils import check_version_exists
 
 if check_version_exists("opus-tools", env["OPUS_VERSION_NAME"]) and check_version_exists("flac", env["FLAC_VERSION_NAME"]):
     print("Skipping flac and opus builds! (Versions already exist)")
