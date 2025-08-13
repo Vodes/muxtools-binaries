@@ -8,7 +8,12 @@
             "windows-amd64",
             "linux-x86_64"
         ],
-        "versions": []
+        "versions": [
+            {
+                "version": "1.5.0",
+                "version_code": "0"
+            }
+        ]
     },
     "opus-tools": {
         "contains": [
