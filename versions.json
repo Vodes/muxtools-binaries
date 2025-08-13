@@ -20,8 +20,7 @@
             "windows-amd64",
             "linux-x86_64"
         ],
-        "versions": [
-        ]
+        "versions": []
     },
     "ffmpeg": {
         "contains": [
@@ -33,6 +32,10 @@
             "linux-x86_64"
         ],
         "versions": [
+            {
+                "version": "2025-08-05",
+                "version_code": "0"
+            }
         ]
     }
 }
