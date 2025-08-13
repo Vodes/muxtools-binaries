@@ -20,7 +20,12 @@
             "windows-amd64",
             "linux-x86_64"
         ],
-        "versions": []
+        "versions": [
+            {
+                "version": "0.2-libopus-1.5.2",
+                "version_code": "0"
+            }
+        ]
     },
     "ffmpeg": {
         "contains": [
