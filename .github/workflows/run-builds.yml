@@ -1,0 +1,71 @@
+name: Run builds
+on:
+  push:
+  workflow_dispatch:
+  
+env:
+  GH_TOKEN: ${{ github.token }}
+
+permissions:
+  contents: write
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Run builds
+        run: uv run run-builds.py
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-builds
+          path: /tmp/builds
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Run builds
+        run: uv run run-builds.py
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: win-builds
+          path: C:\tmp\builds
+
+  release:
+    runs-on: ubuntu-22.04
+    needs: [build-linux, build-windows]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+      - name: Download linux artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: linux-builds
+          path: /tmp/builds
+          merge-multiple: true
+      - name: Download windows artifacts
+        uses: actions/download-artifact@v5
+        with:
+          name: win-builds
+          path: /tmp/builds
+          merge-multiple: true
+      - name: Create releases
+        run: uv run release.py

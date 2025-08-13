@@ -1,0 +1,47 @@
+{
+    "flac": {
+        "contains": [
+            "flac",
+            "metaflac"
+        ],
+        "supported_platforms": [
+            "windows-amd64",
+            "linux-x86_64"
+        ],
+        "versions": [
+            {
+                "version": "1.5.0",
+                "version_code": "0"
+            }
+        ]
+    },
+    "opus-tools": {
+        "contains": [
+            "opusenc",
+            "opusdec",
+            "opusinfo"
+        ],
+        "supported_platforms": [
+            "windows-amd64",
+            "linux-x86_64"
+        ],
+        "versions": [
+            {
+                "version": "0.2-libopus-1.5.2",
+                "version_code": "0"
+            }
+        ]
+    },
+    "ffmpeg": {
+        "contains": [
+            "ffmpeg",
+            "ffprobe"
+        ],
+        "supported_platforms": [
+            "windows-amd64",
+            "linux-x86_64"
+        ],
+        "versions": [
+        ]
+    }
+}

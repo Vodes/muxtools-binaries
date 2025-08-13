@@ -1,0 +1,41 @@
+[project]
+name = "muxtools-binaries"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2",
+    "utils"
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.6.5",
+]
+
+[tool.uv.sources]
+utils = { workspace = true }
+
+[tool.uv.workspace]
+members = [
+    "utils",
+]
+
+[tool.ruff]
+line-length = 150
+indent-width = 4
+target-version = "py311"
+
+[tool.ruff.lint]
+ignore = ["E722", "E501", "RUF022"]
+extend-select = ["F", "E", "RUF"]
+fixable = ["F541", "F401", "E712", "E711"]
+exclude = ["__init__.py"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
