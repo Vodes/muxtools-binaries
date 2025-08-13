@@ -17,7 +17,7 @@ with requests.get(OPUS_URL, stream=True) as response:
         for part in response.iter_content(1024 * 1024):
             out.write(part)
     run_cmd(f'7z x "{opus_file.resolve()}"')
-    with zipfile.ZipFile(opus_zip, "w") as f:
+    with zipfile.ZipFile(opus_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=7) as f:
         for bin in Path().rglob("*opus*.exe"):
             f.write(bin, bin.name)
 
@@ -30,7 +30,7 @@ with requests.get(FLAC_URL, stream=True) as response:
         for part in response.iter_content(1024 * 1024):
             out.write(part)
     run_cmd(f'7z x "{flac_file.resolve()}"')
-    with zipfile.ZipFile(flac_zip, "w") as f:
+    with zipfile.ZipFile(flac_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=7) as f:
         for bin in Path().rglob("*flac*.exe"):
             f.write(bin, bin.name)
 

@@ -18,7 +18,7 @@ if os.name == "nt":
     downloaded = Path("ffmpeg.zip")
     download_file(WIN_X86_URL, downloaded)
     run_cmd(f'7z x "{downloaded.resolve()}"', cwd=cwd)
-    with zipfile.ZipFile(out_zip, "w") as f:
+    with zipfile.ZipFile(out_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=7) as f:
         for bin in list(Path().rglob("ffmpeg.exe")) + list(Path().rglob("ffprobe.exe")):
             if not bin.is_file():
                 continue
@@ -29,7 +29,7 @@ else:
     downloaded = Path("ffmpeg.tar.xz")
     download_file(LINUX_X86_URL, downloaded)
     run_cmd(f'tar -xvf "{downloaded.resolve()}" --strip-components=1', cwd=cwd)
-    with zipfile.ZipFile(out_zip, "w") as f:
+    with zipfile.ZipFile(out_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=7) as f:
         for bin in list(Path().rglob("ffmpeg")) + list(Path().rglob("ffprobe")):
             if not bin.is_file():
                 continue

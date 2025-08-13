@@ -21,13 +21,13 @@ for cmd in commands:
     run_cmd(cmd)
 
 
-with zipfile.ZipFile(opus_zip, "w") as f:
+with zipfile.ZipFile(opus_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=7) as f:
     for bin in (Path(env["BUILD_DIR"]) / "bin").glob("*opus*"):
         f.write(bin, bin.name)
 
     f.writestr(".metadata.json", json.dumps(dict(NAME="opus-tools", VERSION=env["OPUS_VERSION_NAME"], VERSION_CODE=env["OPUS_VERSION_CODE"])))
 
-with zipfile.ZipFile(flac_zip, "w") as f:
+with zipfile.ZipFile(flac_zip, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=7) as f:
     for bin in (Path(env["BUILD_DIR"]) / "bin").glob("*flac*"):
         f.write(bin, bin.name)
 
