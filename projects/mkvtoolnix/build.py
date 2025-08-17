@@ -38,8 +38,8 @@ else:
         f.write(downloaded, downloaded.name)
         symlinks = {"mkvmerge", "mkvpropedit", "mkvinfo", "mkvextract"}
         for link in symlinks:
-            link = cwd / link
-            os.symlink(downloaded.name, link)
-            f.write(link, link.name)
+            with open(cwd / link) as link_file:
+                link_file.writelines(["#!/bin/bash\n", "chmod u+x mkvtoolnix.AppImage\n", f"ln -sf mkvtoolnix.AppImage {link}\n", f'./{link} "$@"'])
+            f.write(cwd / link, link)
 
         f.writestr(".metadata.json", json_metadata)
