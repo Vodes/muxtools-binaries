@@ -60,10 +60,6 @@
             "linux-x86_64"
         ],
         "versions": [
-            {
-                "version": "94.0",
-                "version_code": "0"
-            }
         ]
     }
 }

@@ -38,7 +38,7 @@ else:
         f.write(downloaded, downloaded.name)
         symlinks = {"mkvmerge", "mkvpropedit", "mkvinfo", "mkvextract"}
         for link in symlinks:
-            with open(cwd / link) as link_file:
+            with open(cwd / link, "w", encoding="utf-8") as link_file:
                 link_file.writelines(["#!/bin/bash\n", "chmod u+x mkvtoolnix.AppImage\n", f"ln -sf mkvtoolnix.AppImage {link}\n", f'./{link} "$@"'])
             f.write(cwd / link, link)
 
