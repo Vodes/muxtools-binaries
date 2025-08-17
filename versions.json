@@ -9,6 +9,10 @@
             "linux-x86_64"
         ],
         "versions": [
+            {
+                "version": "1.5.0",
+                "version_code": "0"
+            }
         ]
     },
     "opus-tools": {
@@ -22,6 +26,10 @@
             "linux-x86_64"
         ],
         "versions": [
+            {
+                "version": "0.2-libopus-1.5.2",
+                "version_code": "0"
+            }
         ]
     },
     "ffmpeg": {
@@ -34,6 +42,10 @@
             "linux-x86_64"
         ],
         "versions": [
+            {
+                "version": "2025-08-05",
+                "version_code": "0"
+            }
         ]
     },
     "mkvtoolnix": {
