@@ -75,10 +75,6 @@
             "linux-x86_64"
         ],
         "versions": [
-            {
-                "version": "1.0.6-libfdk-2.0.3",
-                "version_code": "0"
-            }
         ]
     }
 }
