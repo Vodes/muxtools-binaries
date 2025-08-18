@@ -67,11 +67,18 @@
         ]
     },
     "fdkaac": {
-        "contains": [ "fdkaac" ],
+        "contains": [
+            "fdkaac"
+        ],
         "supported_platforms": [
             "windows-amd64",
             "linux-x86_64"
         ],
-        "versions": []
+        "versions": [
+            {
+                "version": "1.0.6-libfdk-2.0.3",
+                "version_code": "0"
+            }
+        ]
     }
 }
