@@ -48,6 +48,7 @@ jobs:
   release:
     runs-on: ubuntu-22.04
     needs: [build-linux, build-windows]
+    if: ${{ github.ref == 'refs/heads/main' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
