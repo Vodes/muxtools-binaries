@@ -36,5 +36,8 @@ with zipfile.ZipFile(release_zip_linux64, "w", compression=zipfile.ZIP_DEFLATED,
 with zipfile.ZipFile(release_zip_win64, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=7) as f:
     bin = Path(env["BUILD_DIR_WIN64"]) / "bin" / "fdkaac.exe"
     f.write(bin, bin.name)
+    pkg = Path("/usr/x86_64-w64-mingw32")
+    for deps in list(pkg.rglob("libfdk*.a")) + list(pkg.rglob("libfdk*.dll")):
+        f.write(deps, deps.name)
 
     f.writestr(".metadata.json", json_metadata)
