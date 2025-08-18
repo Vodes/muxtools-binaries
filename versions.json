@@ -65,5 +65,13 @@
                 "version_code": "0"
             }
         ]
+    },
+    "fdkaac": {
+        "contains": [ "fdkaac" ],
+        "supported_platforms": [
+            "windows-amd64",
+            "linux-x86_64"
+        ],
+        "versions": []
     }
 }
