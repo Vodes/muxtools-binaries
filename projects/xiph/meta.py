@@ -8,9 +8,9 @@ cwd = Path(__file__).parent
 meta_env = dict(
     # Git branches
     TAG_OGG="v1.3.6",
-    TAG_OPUS="v1.5.2",
+    TAG_OPUS="v1.6",
     TAG_OPUSFILE="v0.12",
-    TAG_LIBOPUSENC="v0.2.1",
+    TAG_LIBOPUSENC="v0.3",
     TAG_FLAC="1.5.0",
     TAG_OPUSTOOLS="v0.2",
     # Build env
@@ -18,8 +18,8 @@ meta_env = dict(
     PKG_CONFIG_PATH="/tmp/opus-build/lib/pkgconfig",
     OPT_FLAGS="-fno-strict-aliasing -O2",
     # Release
-    OPUS_VERSION_NAME="0.2-libopus-1.5.2",
-    OPUS_VERSION_CODE="0",
+    OPUS_VERSION_NAME="0.2-libopus-1.6",
+    OPUS_VERSION_CODE="1",
     FLAC_VERSION_NAME="1.5.0",
     FLAC_VERSION_CODE="0",
 )
