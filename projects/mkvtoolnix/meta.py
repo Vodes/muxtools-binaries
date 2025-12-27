@@ -5,8 +5,8 @@ cwd = Path(__file__).parent
 
 meta_env = dict(
     # Release
-    VERSION_NAME="94.0",
-    VERSION_CODE="0",
+    VERSION_NAME="96.0",
+    VERSION_CODE="1",
 )
 
 env = os.environ.copy()

@@ -5,7 +5,7 @@ import zipfile
 import json
 from utils import run_cmd
 
-OPUS_URL = "https://www.rarewares.org/files/opus/opus-tools%200.2-34-g98f3ddc-x64.zip"
+OPUS_URL = "https://www.rarewares.org/files/opus/opus-tools-0.2-37-g5f83943-x64.zip"
 FLAC_URL = "https://www.rarewares.org/files/lossless/flac-1.5.0-AVX2.zip"
 
 Path(R"C:\tmp\dl").mkdir(exist_ok=True, parents=True)
