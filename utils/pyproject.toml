@@ -2,7 +2,7 @@
 name = "utils"
 version = "0.0.1"
 description = "Utils"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 dependencies = [
     "pydantic>=2.11.7",
     "requests>=2.32.4"
