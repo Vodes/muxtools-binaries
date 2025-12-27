@@ -29,6 +29,10 @@
             {
                 "version": "0.2-libopus-1.5.2",
                 "version_code": "0"
+            },
+            {
+                "version": "0.2-libopus-1.6",
+                "version_code": "1"
             }
         ]
     },
@@ -45,6 +49,10 @@
             {
                 "version": "2025-08-05",
                 "version_code": "0"
+            },
+            {
+                "version": "2025-12-27",
+                "version_code": "1"
             }
         ]
     },
@@ -63,6 +71,10 @@
             {
                 "version": "94.0",
                 "version_code": "0"
+            },
+            {
+                "version": "96.0",
+                "version_code": "1"
             }
         ]
     },
@@ -75,6 +87,10 @@
             "linux-x86_64"
         ],
         "versions": [
+            {
+                "version": "1.0.6-libfdk-2.0.3",
+                "version_code": "0"
+            }
         ]
     }
 }
