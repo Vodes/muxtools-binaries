@@ -1,7 +1,7 @@
 schema_version = 1
 name = "mkvtoolnix"
-version = "96.0"
-version_code = 1
+version = "101.0"
+version_code = 2
 type = "upstream-binary"
 provider = "MKVToolNix"
 
@@ -9,13 +9,13 @@ provider = "MKVToolNix"
 requirements = ["libfuse.so.2", "libz.so.1"]
 
 [targets.linux-x86_64.asset]
-url = "https://mkvtoolnix.download/appimage/MKVToolNix_GUI-96.0-x86_64.AppImage"
-sha256 = "19a746f457377a10e71207344028f1a04aed03991e2c754401938e90ef16d7a7"
+url = "https://mkvtoolnix.download/appimage/MKVToolNix_GUI-101.0-x86_64.AppImage"
+sha256 = "b94c4e91146f46bb4a54e21ac29e8fcf58a60bcdf98944b1e923e73881f5eba7"
 format = "appimage"
 
 [targets.windows-x86_64.asset]
-url = "https://mkvtoolnix.download/windows/releases/96.0/mkvtoolnix-64-bit-96.0.zip"
-sha256 = "c2414e7be958b6ff3e3190707e15b82323774a1bb56bd0f3507096f2642f60e9"
+url = "https://mkvtoolnix.download/windows/releases/101.0/mkvtoolnix-64-bit-101.0.zip"
+sha256 = "59a807b45b34ac524dfdef61edcf0642ee9bd6b08c130cfc078532c362569abc"
 format = "zip"
 
 [executables]
