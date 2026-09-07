@@ -1,13 +1,13 @@
 schema_version = 1
 name = "fdkaac"
-version = "1.0.6-libfdk-2.0.3"
-version_code = 1
+version = "1.0.9-libfdk-2.0.3"
+version_code = 2
 type = "source-build"
 
 [source]
 repository = "https://github.com/nu774/fdkaac.git"
-tag = "v1.0.6"
-commit = "35527e4041f30107f02519af920bcb3e91787329"
+tag = "v1.0.9"
+commit = "1b311f7cda11ddabc11bb0e6230506796a6018c5"
 
 [dependencies.fdk]
 repository = "https://github.com/mstorsjo/fdk-aac.git"
