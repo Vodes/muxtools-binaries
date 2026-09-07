@@ -1,7 +1,7 @@
 schema_version = 1
 name = "opus-tools"
-version = "0.2-libopus-1.6"
-version_code = 1
+version = "0.2-libopus-1.6.1"
+version_code = 2
 type = "source-build"
 
 [source]
@@ -16,8 +16,8 @@ commit = "be05b13e98b048f0b5a0f5fa8ce514d56db5f822"
 
 [dependencies.opus]
 repository = "https://github.com/xiph/opus.git"
-tag = "v1.6"
-commit = "a8b13e40d751c7b40833b94fc9437c5c3439da89"
+tag = "v1.6.1"
+commit = "22244de5a79bd1d6d623c32e72bf1954b56235be"
 
 [dependencies.opusfile]
 repository = "https://github.com/xiph/opusfile.git"
