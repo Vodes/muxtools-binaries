@@ -63,7 +63,8 @@ def update_definition(data: dict[str, Any]) -> dict[str, Any]:
             version += "-libfdk-" + updated["dependencies"]["fdk"]["tag"].removeprefix("v")
         if data["name"] == "opus-tools":
             version += "-libopus-" + updated["dependencies"]["opus"]["tag"].removeprefix("v")
-        updated["version"] = version
+        if updated["source"] != data["source"] or updated.get("dependencies") != data.get("dependencies"):
+            updated["version"] = version
     elif kind == "github-release":
         repository = data["update"]["repository"]
         releases = get_json(f"https://api.github.com/repos/{repository}/releases?per_page=100")

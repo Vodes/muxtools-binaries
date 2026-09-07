@@ -54,6 +54,17 @@ def test_noop_and_dependency_update(package, monkeypatch):
     assert newer["version_code"] == updated["version_code"] + 1
 
 
+def test_post_release_version_is_preserved_until_upstream_changes(package, monkeypatch):
+    data = package.model_dump()
+    data.update(version="1.0.post1", version_code=2)
+    monkeypatch.setattr("muxtools_binaries.updates.latest_tag", lambda source: source)
+    assert update_definition(data) == data
+    monkeypatch.setattr("muxtools_binaries.updates.latest_tag", lambda source: dict(source, tag="v2.0"))
+    updated = update_definition(data)
+    assert updated["version"] == "2.0"
+    assert updated["version_code"] == 3
+
+
 @pytest.mark.parametrize("version", ["2.0", "2.0-1-gabcdef"])
 def test_ffmpeg_asset_selection(package, monkeypatch, version):
     data = package.model_dump()

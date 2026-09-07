@@ -77,10 +77,14 @@ class GitHub:
         response.raise_for_status()
         return response.content
 
-    def upload(self, release: dict[str, Any], path: Path) -> None:
+    def upload(self, release: dict[str, Any], path: Path, *, replace: bool = False) -> None:
         assets = release_assets(self, release)
         existing = next((a for a in assets if a["name"] == path.name), None)
-        if existing:
+        if existing and replace:
+            if not release["draft"]:
+                raise ValueError("Cannot replace an asset on a published release")
+            self.request("DELETE", f"/releases/assets/{existing['id']}")
+        elif existing:
             import hashlib
 
             digest = hashlib.sha256(self.asset_bytes(existing)).hexdigest()
@@ -195,16 +199,58 @@ def _publish_draft(github: GitHub, release: dict[str, Any]) -> None:
         github.request("PATCH", f"/releases/{release['id']}", json={"draft": False, "make_latest": "false"})
 
 
-def _publish_package(github: GitHub, repository: str, name: str, targets: TargetArtifacts) -> dict[str, Any]:
+def _published_entry(github: GitHub, release: dict[str, Any], name: str, version: str) -> dict[str, Any] | None:
+    entry: dict[str, Any] | None = None
+    with tempfile.TemporaryDirectory() as temporary:
+        directory = Path(temporary)
+        for asset in release_assets(github, release):
+            if not asset["name"].endswith(".tar.zst"):
+                continue
+            archive = directory / "archive.tar.zst"
+            archive.write_bytes(github.asset_bytes(asset))
+            stage = directory / str(asset["id"])
+            extract(archive, stage, "tar.zst")
+            data = read_metadata(stage)
+            if (data["name"], data["version"]) != (name, version):
+                raise ValueError("Published archive identity differs from its release")
+            if entry is None:
+                entry = {
+                    "version": version,
+                    "version_code": data["version_code"],
+                    "tag": release["tag_name"],
+                    "targets": {},
+                }
+            if data["version_code"] != entry["version_code"] or data["target"] in entry["targets"]:
+                raise ValueError("Inconsistent published package archives")
+            entry["targets"][data["target"]] = {
+                "url": asset["browser_download_url"],
+                "sha256": sha256(archive),
+                "size": archive.stat().st_size,
+                "binaries": data["binaries"],
+                "runtime": data.get("runtime", {}),
+            }
+    return entry
+
+
+def _publish_package(
+    github: GitHub,
+    repository: str,
+    name: str,
+    targets: TargetArtifacts,
+    release: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     sample = next(iter(targets.values()))[1]
     tag = f"{name}-{sample['version']}"
-    release = github.ensure_release(tag, sample["builder"]["revision"])
+    release = release or github.ensure_release(tag, sample["builder"]["revision"])
+    if not release["draft"]:
+        print(f"Skipping published version {tag}; recovering its catalog entry from published archives", flush=True)
+        return _published_entry(github, release, name, sample["version"])
     entry = {"version": sample["version"], "version_code": sample["version_code"], "tag": tag, "targets": {}}
     for target, (archive, data, digest) in targets.items():
         checksum = archive.with_name(archive.name + ".sha256")
         checksum.write_text(f"{digest}  {archive.name}\n")
-        github.upload(release, archive)
-        github.upload(release, checksum)
+        github.upload(release, archive, replace=True)
+        github.upload(release, checksum, replace=True)
         entry["targets"][target] = {
             "url": f"https://github.com/{repository}/releases/download/{tag}/{archive.name}",
             "sha256": digest,
@@ -222,13 +268,20 @@ def _update_catalog(github: GitHub, repository: str, catalog: dict[str, Any], gr
         version = sample["version"]
         package_entry = catalog["packages"].setdefault(name, {"provides": [], "versions": {}})
         versions = package_entry["versions"]
-        if version not in versions and any(
+        if version in versions:
+            print(f"Skipping published version {name}-{version}", flush=True)
+            continue
+        release = github.release(f"{name}-{version}")
+        if (release is None or release["draft"]) and any(
             sample["version_code"] <= entry["version_code"] for entry in versions.values()
         ):
             raise ValueError(f"Version code for {name} must exceed its published version codes")
-        entry = _publish_package(github, repository, name, targets)
-        if version in versions and versions[version] != entry:
-            raise ValueError("Conflicting catalog identity")
+        entry = _publish_package(github, repository, name, targets, release)
+        if entry is None:
+            print(f"No catalog metadata available for historical release {name}-{version}", flush=True)
+            if not versions:
+                del catalog["packages"][name]
+            continue
         versions[version] = entry
         latest = max(versions.values(), key=lambda item: item["version_code"])
         package_entry["provides"] = sorted(

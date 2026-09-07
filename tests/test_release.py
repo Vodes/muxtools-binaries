@@ -6,7 +6,15 @@ import pytest
 
 from muxtools_binaries.artifacts import pack
 from muxtools_binaries.io import sha256
-from muxtools_binaries.release import GitHub, _publish_catalog, collect, publish, release_allowed
+from muxtools_binaries.release import (
+    GitHub,
+    _publish_catalog,
+    _publish_package,
+    _update_catalog,
+    collect,
+    publish,
+    release_allowed,
+)
 
 
 def test_manual_release_gate():
@@ -74,6 +82,7 @@ def test_failed_upload_does_not_publish_catalog(releases, package, monkeypatch):
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
     api = Mock()
     api.release.return_value = None
+    api.ensure_release.return_value = {"id": 2, "draft": True}
     api.upload.side_effect = ValueError("upload failed")
     monkeypatch.setattr("muxtools_binaries.release.GitHub", lambda _: api)
     with pytest.raises(ValueError, match="upload failed"):
@@ -93,13 +102,13 @@ def test_catalog_provides_and_nested_versions(releases, package, monkeypatch):
         "packages": {package.name: {"provides": ["old-tool"], "versions": {"previous": previous}}},
     }
     api = Mock()
-    api.release.return_value = {"id": 1, "draft": False}
+    api.release.side_effect = lambda tag: {"id": 1, "draft": False} if tag == "catalog-v1" else None
     api.ensure_release.return_value = {"id": 2, "draft": True}
     api.request.return_value = [{"id": 3, "name": "versions.json"}]
     api.asset_bytes.return_value = json.dumps(old_catalog).encode()
     published = {}
 
-    def upload(release, path):
+    def upload(release, path, **kwargs):
         if path.name == "versions.json":
             published.update(json.loads(path.read_text()))
 
@@ -110,6 +119,88 @@ def test_catalog_provides_and_nested_versions(releases, package, monkeypatch):
     assert entry["provides"] == sorted(package.executables)
     assert entry["versions"]["previous"] == previous
     assert entry["versions"][package.version]["version_code"] == package.version_code
+
+
+def test_existing_version_keeps_published_catalog_without_comparing_build(releases, package):
+    groups = collect(releases, releases)
+    original = {"version_code": 1, "targets": {"linux-x86_64": {"sha256": "original", "size": 123}}}
+    catalog = {
+        "schema_version": 1,
+        "packages": {package.name: {"provides": ["old-tool"], "versions": {package.version: original}}},
+    }
+    before = json.dumps(catalog)
+    api = Mock()
+    _update_catalog(api, "example/repo", catalog, groups)
+    assert json.dumps(catalog) == before
+    assert api.mock_calls == []
+
+
+def test_published_version_recovers_catalog_using_original_archives(releases, package):
+    groups = collect(releases, releases)
+    assets = []
+    contents = {}
+    original = {}
+    for target, (archive, data, digest) in groups[package.name].items():
+        asset_id = len(assets) + 1
+        url = f"https://example.test/{archive.name}"
+        assets.append({"id": asset_id, "name": archive.name, "browser_download_url": url})
+        contents[asset_id] = archive.read_bytes()
+        original[target] = {
+            "url": url,
+            "sha256": digest,
+            "size": archive.stat().st_size,
+            "binaries": data["binaries"],
+            "runtime": {},
+        }
+        archive.write_bytes(b"different rebuilt archive")
+        data["version_code"] = 99
+        data["binaries"] = {"different": {"baseline": "different"}}
+    api = Mock()
+    api.ensure_release.return_value = {"id": 10, "draft": False, "tag_name": f"{package.name}-{package.version}"}
+    api.request.return_value = assets
+    api.asset_bytes.side_effect = lambda asset: contents[asset["id"]]
+    entry = _publish_package(api, "example/repo", package.name, groups[package.name])
+    assert entry["version_code"] == package.version_code
+    assert entry["targets"] == original
+    api.upload.assert_not_called()
+    assert all(call.args[0] == "GET" for call in api.request.call_args_list)
+
+
+def test_historical_release_is_skipped_without_catalog_metadata(releases, package):
+    groups = collect(releases, releases)
+    api = Mock()
+    api.release.return_value = {"id": 10, "draft": False}
+    api.request.return_value = [{"id": 1, "name": "legacy.zip"}]
+    catalog = {"schema_version": 1, "packages": {}}
+    _update_catalog(api, "example/repo", catalog, groups)
+    assert catalog["packages"] == {}
+    api.upload.assert_not_called()
+    api.asset_bytes.assert_not_called()
+
+
+def test_existing_uncataloged_version_is_skipped_even_with_a_lower_version_code(releases, package):
+    groups = collect(releases, releases)
+    api = Mock()
+    api.release.return_value = {"id": 10, "draft": False}
+    api.request.return_value = [{"id": 1, "name": "legacy.zip"}]
+    newer = {"version_code": package.version_code + 1, "targets": {}}
+    catalog = {"schema_version": 1, "packages": {package.name: {"provides": [], "versions": {"newer": newer}}}}
+    _update_catalog(api, "example/repo", catalog, groups)
+    assert catalog["packages"][package.name]["versions"] == {"newer": newer}
+    api.ensure_release.assert_not_called()
+    api.upload.assert_not_called()
+
+
+def test_new_version_requires_increasing_version_code_before_creating_release(releases, package):
+    groups = collect(releases, releases)
+    api = Mock()
+    api.release.return_value = None
+    previous = {"version_code": package.version_code, "targets": {}}
+    catalog = {"schema_version": 1, "packages": {package.name: {"provides": [], "versions": {"previous": previous}}}}
+    with pytest.raises(ValueError, match="must exceed"):
+        _update_catalog(api, "example/repo", catalog, groups)
+    api.ensure_release.assert_not_called()
+    api.upload.assert_not_called()
 
 
 @pytest.mark.parametrize("state", ["changed", "unchanged", "failed"])
@@ -177,3 +268,36 @@ def test_http_upload_integrity_and_redirects(tmp_path, monkeypatch):
         archive.write_bytes(b"changed")
         with pytest.raises(ValueError, match="Conflicting"):
             api.upload(release, archive)
+
+
+def test_draft_retry_replaces_old_bytes_and_verifies_upload(tmp_path, monkeypatch):
+    monkeypatch.setenv("GH_TOKEN", "fixture-token")
+    archive = tmp_path / "example.tar.zst"
+    archive.write_bytes(b"fresh build with different timestamps")
+    events = []
+    uploaded = []
+
+    def respond(request):
+        events.append((request.method, request.url.path))
+        if request.method == "DELETE":
+            return httpx2.Response(204)
+        if request.method == "POST":
+            uploaded.append(request.read())
+            return httpx2.Response(201, json={"id": 2})
+        if request.url.path.endswith("/assets/2"):
+            return httpx2.Response(200, content=uploaded[-1])
+        assert not request.url.path.endswith("/assets/1")
+        return httpx2.Response(200, json=[{"id": 1, "name": archive.name}])
+
+    api = GitHub("example/repo")
+    with httpx2.Client(transport=httpx2.MockTransport(respond)) as client:
+        api.session.close()
+        api.session = client
+        release = {"id": 10, "draft": True, "upload_url": "https://uploads.github.com/example"}
+        api.upload(release, archive, replace=True)
+        assert uploaded == [archive.read_bytes()]
+        assert [method for method, _ in events] == ["GET", "DELETE", "POST", "GET"]
+        events.clear()
+        with pytest.raises(ValueError, match="Cannot replace"):
+            api.upload(dict(release, draft=False), archive, replace=True)
+        assert [method for method, _ in events] == ["GET"]

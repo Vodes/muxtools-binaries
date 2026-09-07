@@ -70,7 +70,9 @@ the newest published entry without parsing tool-specific version strings.
 
 Published `(name, version)` identities remain immutable.
 Increasing `version_code` alone does not create a separate release or authorize replacing an existing one;
-publishing changed artifacts under an existing version fails.
+publishing an existing version skips it without comparing the rebuilt archive's checksum.
+Use a new package version such as `4.2.post1` and advance `version_code` to publish a changed build of the same source.
+Update discovery preserves that package version until its source or dependency pins change.
 This also protects historical releases whose tags already use the same naming scheme.
 
 ### Source builds and dependencies
@@ -103,11 +105,12 @@ Archives extract directly into their installation directory and contain `.metada
 executables, licenses, and any private runtime resources.
 
 - Members are sorted.
-- Ownership and timestamps are normalized.
+- Ownership is normalized; file and directory modification times are retained.
 - Executable modes are retained.
 - Zstandard compression uses level 19.
 
-Normalizing packaging does not claim arbitrary upstream source builds are bit-for-bit reproducible.
+Imported archives retain their upstream modification times, including ZIP and 7z imports.
+Build and packaging times can differ between runs, so identical binaries can produce different archive checksums.
 
 ### Metadata and executable variants
 
@@ -188,8 +191,11 @@ The publisher also enforces that gate in Python.
 A package needs every declared target and matching native smoke reports before any upload.
 Each package release is assembled and verified as a draft, then published.
 
-- Existing identical assets are accepted on retry.
-- Conflicting assets or incomplete already-published releases fail.
+- Versions already in the catalog are skipped, retaining their original download metadata and checksums.
+- Published releases missing from the catalog are reused; catalog entries are recovered from their published archives.
+  Historical releases without the current archive metadata are skipped without adding a catalog entry.
+- Draft assets are replaced on retry so all targets and checksums come from the current verified build.
+- Checksums still verify new uploads and downloads; they do not decide whether a version is already published.
 - No release or tag is deleted or moved.
 
 ### Version catalog

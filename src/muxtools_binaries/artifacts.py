@@ -99,7 +99,7 @@ def pack(stage: Path, data: dict[str, Any], output: Path) -> Path:
         with tarfile.open(fileobj=compressed, mode="w|", format=tarfile.PAX_FORMAT) as tar:
             for path in sorted(stage.rglob("*")):
                 info = tar.gettarinfo(str(path), path.relative_to(stage).as_posix())
-                info.uid = info.gid = info.mtime = 0
+                info.uid = info.gid = 0
                 info.uname = info.gname = ""
                 info.pax_headers = {}
                 info.mode = 0o755 if path.is_dir() or path.stat().st_mode & 0o111 else 0o644

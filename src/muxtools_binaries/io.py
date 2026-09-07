@@ -4,6 +4,7 @@ import shutil
 import stat
 import subprocess
 import tarfile
+import time
 import zipfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -70,6 +71,7 @@ def extract(archive: Path, destination: Path, kind: str) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     if any(destination.iterdir()):
         raise ValueError("Extraction destination must be empty")
+    directory_times: list[tuple[Path, float]] = []
     if kind == "zip":
         with zipfile.ZipFile(archive) as source:
             seen = set()
@@ -81,11 +83,14 @@ def extract(archive: Path, destination: Path, kind: str) -> None:
                 output = destination / name
                 if member.is_dir():
                     output.mkdir(parents=True, exist_ok=True)
+                    directory_times.append((output, time.mktime((*member.date_time, 0, 0, -1))))
                 else:
                     output.parent.mkdir(parents=True, exist_ok=True)
                     with source.open(member) as src, output.open("wb") as dst:
                         shutil.copyfileobj(src, dst)
                     output.chmod(0o755 if member.external_attr >> 16 & 0o111 else 0o644)
+                    modified = time.mktime((*member.date_time, 0, 0, -1))
+                    os.utime(output, (modified, modified))
     elif kind == "7z":
         with py7zr.SevenZipFile(archive) as source:
             seen = set()
@@ -108,3 +113,7 @@ def extract(archive: Path, destination: Path, kind: str) -> None:
                         raise ValueError(f"Duplicate or non-regular archive entry: {name}")
                     seen.add(name.casefold())
                     source.extract(member, destination, filter="data")
+                    if member.isdir() and member.mtime is not None:
+                        directory_times.append((destination / name, member.mtime))
+    for path, modified in reversed(directory_times):
+        os.utime(path, (modified, modified))

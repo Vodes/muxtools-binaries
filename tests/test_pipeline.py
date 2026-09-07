@@ -1,6 +1,8 @@
 import io
 import os
 import tarfile
+import time
+import zipfile
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -31,6 +33,7 @@ def test_archive_roundtrip(tmp_path):
     binary = stage / "example"
     binary.write_bytes(b"fixture")
     binary.chmod(0o755)
+    os.utime(binary, (1700000000.25, 1700000000.25))
     data = dict(
         schema_version=1,
         name="example",
@@ -42,13 +45,55 @@ def test_archive_roundtrip(tmp_path):
         provenance={"channel": "test"},
     )
     first = sha256(pack(stage, data, tmp_path / "dist"))
-    os.utime(binary, (123, 123))
+    os.utime(binary, (1700000010.5, 1700000010.5))
     archive = pack(stage, data, tmp_path / "dist")
     assert archive.name == f"{data['name']}-{data['version']}-{data['target']}.tar.zst"
-    assert sha256(archive) == first
+    assert sha256(archive) != first
     extract(archive, tmp_path / "unpacked", "tar.zst")
     assert read_metadata(tmp_path / "unpacked") == data
     assert (tmp_path / "unpacked/example").read_bytes() == binary.read_bytes()
+    assert (tmp_path / "unpacked/example").stat().st_mtime == binary.stat().st_mtime
+
+
+@pytest.mark.parametrize("kind", ["zip", "tar", "7z"])
+def test_imported_timestamps_survive_packaging(tmp_path, kind):
+    source = tmp_path / "source"
+    source.mkdir()
+    binary = source / "example"
+    binary.write_bytes(b"imported fixture")
+    binary.chmod(0o755)
+    date_time = (2024, 1, 2, 3, 4, 6)
+    modified = time.mktime((*date_time, 0, 0, -1))
+    os.utime(binary, (modified, modified))
+    archive = tmp_path / f"upstream.{kind}"
+    if kind == "zip":
+        with zipfile.ZipFile(archive, "w") as zipped:
+            zipped.write(binary, "example")
+    elif kind == "7z":
+        import py7zr
+
+        with py7zr.SevenZipFile(archive, "w") as seven:
+            seven.write(binary, "example")
+    else:
+        with tarfile.open(archive, "w") as tar:
+            tar.add(binary, "example")
+    stage = tmp_path / "stage"
+    extract(archive, stage, kind)
+    assert (stage / "example").stat().st_mtime == modified
+    (stage / "example").chmod(0o755)
+    data = dict(
+        schema_version=1,
+        name="example",
+        version="1",
+        version_code=1,
+        target="linux-x86_64",
+        binaries={"example": {"baseline": "example"}},
+        smoke={"example": []},
+        provenance={"channel": "test", "type": "import"},
+    )
+    packaged = pack(stage, data, tmp_path / "dist")
+    extract(packaged, tmp_path / "unpacked", "tar.zst")
+    assert (tmp_path / "unpacked/example").stat().st_mtime == modified
 
 
 def test_cpu_detection_and_os_gate(monkeypatch):

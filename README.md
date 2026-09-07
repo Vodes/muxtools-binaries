@@ -34,6 +34,8 @@ uv run muxtools-build test dist/flac-1.5.0-linux-x86_64.tar.zst
 ```
 
 Builds always run when requested, regardless of published versions.
+Publishing skips versions that are already published. To release a changed build of the same upstream source,
+use a new package version (for example `4.2.post1`) and increment `version_code`.
 Windows artifacts must be smoke-tested on Windows; CI supplies native runners.
 
 ### Working directories
@@ -76,6 +78,7 @@ Publication defaults to off in both workflows.
 ### Published artifacts
 
 - Archives use `.tar.zst` on both platforms and contain `.metadata.toml`.
+- File modification times are preserved, including dates from imported archives.
 - The published `versions.json` lives on the `catalog-v1` release.
 
 This is a clean break from the old ZIP/JSON contract; historical releases remain available.
