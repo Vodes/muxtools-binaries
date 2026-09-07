@@ -57,7 +57,12 @@ runtime requirements, and catalog recovery.
 
 ## Releases
 
-PRs and pushes build test artifacts only. No automatic upstream update publishes binaries.
+PRs and pushes to `main` build test artifacts only. No automatic upstream update publishes binaries.
+Automatic builds select packages changed under `packages/<name>/`, comparing PRs with their base
+and pushes with the previous branch commit. Documentation and editor-only changes do not select builds.
+Shared changes (including `src/`, `tests/`, `builder/`, workflows, and dependency configuration)
+rebuild every package. If the previous push commit is unavailable, every package is built.
+Manual runs build all packages unless the `packages` input selects specific names.
 
 Before the first release:
 

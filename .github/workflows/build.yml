@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
+      has_packages: ${{ steps.matrix.outputs.has_packages }}
       image: ${{ steps.builder.outputs.image }}
     steps:
       - uses: actions/checkout@v7.0.1
@@ -53,16 +54,30 @@ jobs:
       - id: matrix
         env:
           PACKAGES: ${{ inputs.packages }}
-          BASE: ${{ github.event.pull_request.base.sha }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || '' }}
+          EVENT: ${{ github.event_name }}
         shell: bash
         run: |
           args=()
-          if [ -n "$BASE" ]; then args+=(--changed-from "$BASE"); fi
+          if [ "$EVENT" = push ]; then
+            if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+              args+=(--changed-from "$BASE")
+            fi
+          elif [ -n "$BASE" ]; then
+            if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+              echo '::error::The pull request base commit is unavailable after checkout.'
+              exit 1
+            fi
+            args+=(--changed-from "$BASE")
+          fi
           result=$(uv run --frozen muxtools-build matrix --packages "$PACKAGES" "${args[@]}")
           echo "matrix=$result" >> "$GITHUB_OUTPUT"
+          has_packages=$(uv run --frozen python -c 'import json, sys; print(str(bool(json.load(sys.stdin)["include"])).lower())' <<<"$result")
+          echo "has_packages=$has_packages" >> "$GITHUB_OUTPUT"
 
   build:
     needs: prepare
+    if: needs.prepare.outputs.has_packages == 'true'
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -96,6 +111,7 @@ jobs:
 
   smoke:
     needs: [prepare, build]
+    if: needs.prepare.outputs.has_packages == 'true'
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -127,8 +143,8 @@ jobs:
           if-no-files-found: error
 
   publish:
-    needs: [build, smoke]
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish
+    needs: [prepare, build, smoke]
+    if: needs.prepare.outputs.has_packages == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish
     runs-on: ubuntu-24.04
     concurrency:
       group: binary-publishing

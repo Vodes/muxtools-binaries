@@ -51,16 +51,25 @@ def _matrix(root: Path, names: str, changed_from: str | None) -> dict[str, list[
     packages = load_packages(root, names.split(",") if names else None)
     if changed_from and not names:
         result = subprocess.run(
-            ["git", "diff", "--name-only", changed_from, "HEAD"],
+            ["git", "diff", "--name-only", "--no-renames", "-z", changed_from, "HEAD"],
             cwd=root,
             check=True,
             capture_output=True,
             text=True,
         )
-        paths = result.stdout.splitlines()
-        if paths and all(path.startswith("packages/") for path in paths):
-            changed = {path.split("/")[1] for path in paths}
-            packages = {name: pkg for name, pkg in packages.items() if name in changed}
+        paths = [path for path in result.stdout.split("\0") if path]
+        changed: set[str] = set()
+        for path in paths:
+            if _ignored_matrix_path(path):
+                continue
+            parts = path.split("/")
+            if parts[0] == "packages" and len(parts) > 2:
+                if parts[1] in packages:
+                    changed.add(parts[1])
+                continue
+            changed = set(packages)
+            break
+        packages = {name: pkg for name, pkg in packages.items() if name in changed}
     return {
         "include": [
             {
@@ -72,6 +81,18 @@ def _matrix(root: Path, names: str, changed_from: str | None) -> dict[str, list[
             for target in p.targets
         ]
     }
+
+
+def _ignored_matrix_path(path: str) -> bool:
+    """Return whether a changed path cannot affect a package build."""
+    lowered = path.casefold()
+    name = lowered.rsplit("/", 1)[-1]
+    return (
+        lowered in {"readme", "readme.md", "readme.rst", "readme.txt"}
+        or lowered == ".editorconfig"
+        or lowered.startswith(("docs/", "context/", ".vscode/", ".idea/"))
+        or name.endswith((".code-workspace", ".sublime-project", ".sublime-workspace"))
+    )
 
 
 def _build_in_container(root: Path, args: argparse.Namespace, image: str, revision: str) -> None:
