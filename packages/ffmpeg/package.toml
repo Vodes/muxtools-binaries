@@ -1,7 +1,7 @@
 schema_version = 1
 name = "ffmpeg"
-version = "8.1.2-2026-06-25"
-version_code = 1
+version = "9.0.1-27-g9b0578816c-2026-09-07"
+version_code = 2
 type = "external-build"
 provider = "Vodes/FFmpeg-Builds"
 
@@ -9,13 +9,13 @@ provider = "Vodes/FFmpeg-Builds"
 requirements = ["libgcc_s.so.1"]
 
 [targets.linux-x86_64.asset]
-url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-06-25-10-01/ffmpeg-n8.1.2-linux64-nonfree-8.1.tar.xz"
-sha256 = "aa09628022d2f0b763e9473752d0eadc101464b927aa998820ab22987c8f1d37"
+url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-09-07-17-21/ffmpeg-n9.0.1-27-g9b0578816c-linux64-nonfree-9.0.tar.xz"
+sha256 = "25fdc8fe4558421aadf2672902b87a1a834fab13fadcb454dc814dc39febe02d"
 format = "tar.xz"
 
 [targets.windows-x86_64.asset]
-url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-06-25-10-01/ffmpeg-n8.1.2-win64-nonfree-8.1.zip"
-sha256 = "a78a322755d085883c53b709cdbfdadd81fa87b6b691bdfea43f874ad21acc25"
+url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-09-07-17-21/ffmpeg-n9.0.1-27-g9b0578816c-win64-nonfree-9.0.zip"
+sha256 = "aec058b2980a310120b8b288c677f31bf930c91ed2d804ee122df984309a5d4e"
 format = "zip"
 
 [executables]
