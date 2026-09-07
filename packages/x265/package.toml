@@ -9,11 +9,12 @@ repository = "https://bitbucket.org/multicoreware/x265_git.git"
 tag = "4.2"
 commit = "e444744c03978c1fb4e037168967020cf2648427"
 
+# Upstream already uses -O3 in the release profile so we're not specifying any flags here
 [targets.linux-x86_64]
 compiler = "clang"
 lto = "thin"
 cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
-extra_ldflags = ["-shared-libgcc"]
+extra_ldflags = ["-shared-libgcc", "-Wl,--strip-debug"]
 
 [targets.linux-x86_64.runtime]
 requirements = ["libgcc_s.so.1"]
@@ -22,6 +23,7 @@ requirements = ["libgcc_s.so.1"]
 compiler = "clang"
 lto = "thin"
 cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
+extra_ldflags = ["-Wl,--strip-debug"]
 
 [executables]
 x265 = ["--version"]
