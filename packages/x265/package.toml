@@ -1,0 +1,27 @@
+schema_version = 1
+name = "x265"
+version = "4.2"
+version_code = 1
+type = "source-build"
+
+[source]
+repository = "https://bitbucket.org/multicoreware/x265_git.git"
+tag = "4.2"
+commit = "e444744c03978c1fb4e037168967020cf2648427"
+
+[targets.linux-x86_64]
+compiler = "clang"
+lto = "thin"
+cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
+extra_ldflags = ["-shared-libgcc"]
+
+[targets.linux-x86_64.runtime]
+requirements = ["libgcc_s.so.1"]
+
+[targets.windows-x86_64]
+compiler = "clang"
+lto = "thin"
+cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
+
+[executables]
+x265 = ["--version"]

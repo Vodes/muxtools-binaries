@@ -1,37 +1,53 @@
 [project]
 name = "muxtools-binaries"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "Pinned portable binary builds and explicit releases"
 readme = "README.md"
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.12"
 dependencies = [
-    "requests>=2",
-    "utils"
+    "httpx2>=2,<3",
+    "packaging>=25",
+    "py-cpuinfo2>=10,<11",
+    "py7zr>=1,<2",
+    "pydantic>=2.11,<3",
+    "tombi>=0.7,<1",
+    "tomlkit>=0.13,<1",
+    "zstandard>=0.23,<1",
 ]
+
+[project.scripts]
+muxtools-build = "muxtools_binaries.cli:main"
 
 [dependency-groups]
 dev = [
-    "ruff>=0.6.5",
+    "mypy>=1.17.1",
+    "pytest>=8,<10",
+    "ruff>=0.12",
 ]
 
-[tool.uv.sources]
-utils = { workspace = true }
+[build-system]
+requires = ["uv_build>=0.8.5,<0.9"]
+build-backend = "uv_build"
 
-[tool.uv.workspace]
-members = [
-    "utils",
-]
+[tool.mypy]
+local_partial_types = true
+allow_redefinition_new = true
+files = ["src", "tests", "builder", "packages"]
+explicit_package_bases = true
+mypy_path = ["$MYPY_CONFIG_FILE_DIR/src", "$MYPY_CONFIG_FILE_DIR/stubs"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
-line-length = 150
+line-length = 120
 indent-width = 4
-target-version = "py311"
+target-version = "py312"
+extend-exclude = ["context"]
 
 [tool.ruff.lint]
-ignore = ["E722", "E501", "RUF022"]
-extend-select = ["F", "E", "RUF"]
-fixable = ["F541", "F401", "E712", "E711"]
-exclude = ["__init__.py"]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
 
 [tool.ruff.format]
 quote-style = "double"
@@ -39,3 +55,11 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-format = false
+
+[tool.tombi.files]
+include = ["**/*.toml"]
+exclude = ["context/**", "build/**", "dist/**", ".venv/**"]
+
+[tool.tombi.format.rules]
+indent-width = 4
+line-width = 120

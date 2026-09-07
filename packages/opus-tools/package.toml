@@ -1,0 +1,51 @@
+schema_version = 1
+name = "opus-tools"
+version = "0.2-libopus-1.6"
+version_code = 1
+type = "source-build"
+
+[source]
+repository = "https://github.com/xiph/opus-tools.git"
+tag = "v0.2"
+commit = "0c1337f57e5b87fd23421904303fed3e575ce354"
+
+[dependencies.ogg]
+repository = "https://github.com/xiph/ogg.git"
+tag = "v1.3.6"
+commit = "be05b13e98b048f0b5a0f5fa8ce514d56db5f822"
+
+[dependencies.opus]
+repository = "https://github.com/xiph/opus.git"
+tag = "v1.6"
+commit = "a8b13e40d751c7b40833b94fc9437c5c3439da89"
+
+[dependencies.opusfile]
+repository = "https://github.com/xiph/opusfile.git"
+tag = "v0.12"
+commit = "a55c164e9891a9326188b7d4d216ec9a88373739"
+
+[dependencies.libopusenc]
+repository = "https://github.com/xiph/libopusenc.git"
+tag = "v0.3"
+commit = "0dba1bea736ab8bb811409dce80c994a00a2ced9"
+
+[dependencies.flac]
+repository = "https://github.com/xiph/flac.git"
+tag = "1.5.0"
+commit = "1507800de4b70e21be71f38caa0d9079d0bc6e45"
+
+[targets.linux-x86_64]
+compiler = "gcc"
+lto = false
+cpu_levels = ["baseline"]
+
+[targets.windows-x86_64]
+compiler = "gcc"
+lto = false
+cpu_levels = ["baseline"]
+extra_cflags = ["-DFLAC__NO_DLL"]
+
+[executables]
+opusenc = ["--version"]
+opusdec = ["--version"]
+opusinfo = ["-V"]

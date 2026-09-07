@@ -1,0 +1,147 @@
+name: Build and test
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: Comma-separated package names (empty means all)
+        type: string
+        default: ''
+      publish:
+        description: Publish verified releases (main only)
+        type: boolean
+        default: false
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      image: ${{ steps.builder.outputs.image }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v10.0.1
+      - name: Check builder image
+        id: builder
+        timeout-minutes: 2
+        env:
+          RELEASE: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish }}
+        run: |
+          image=$(uv run --frozen python -c 'import tomllib; print(tomllib.load(open("builder/lock.toml", "rb"))["image"])')
+          if [ -n "$image" ]; then
+            if ! docker manifest inspect "$image" > /dev/null; then
+              echo '::error::The configured builder image does not exist or is inaccessible. Check builder/lock.toml and registry package visibility.'
+              exit 1
+            fi
+          elif [ "$RELEASE" = true ]; then
+            echo '::error::Adopt a qualified builder digest before publishing.'
+            exit 1
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+      - run: uv run --frozen muxtools-build validate
+      - run: uv run --frozen ruff check src tests builder packages
+      - run: uv run --frozen tombi format --check
+      - run: uv run --frozen tombi lint --error-on-warnings
+      - run: uv run --frozen mypy
+      - run: uv run --frozen pytest -q
+      - id: matrix
+        env:
+          PACKAGES: ${{ inputs.packages }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          args=()
+          if [ -n "$BASE" ]; then args+=(--changed-from "$BASE"); fi
+          result=$(uv run --frozen muxtools-build matrix --packages "$PACKAGES" "${args[@]}")
+          echo "matrix=$result" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.0.1
+      - name: Resolve builder
+        id: builder
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+        run: |
+          image=$IMAGE
+          if [ -z "$image" ]; then
+            docker build -t muxtools-builder:ci -f builder/Dockerfile .
+            image=muxtools-builder:ci
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+      - name: Build package
+        env:
+          PACKAGE: ${{ matrix.package }}
+          TARGET: ${{ matrix.target }}
+          IMAGE: ${{ steps.builder.outputs.image }}
+          CHANNEL: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish && 'release' || 'test' }}
+        run: uv run --frozen muxtools-build build "$PACKAGE" --target "$TARGET" --image "$IMAGE" --channel "$CHANNEL"
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: package-${{ matrix.package }}-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  smoke:
+    needs: [prepare, build]
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          name: package-${{ matrix.package }}-${{ matrix.target }}
+          path: dist
+      - name: Native smoke tests
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            sudo apt-get update
+            sudo apt-get install -y libfuse2t64
+          fi
+          for archive in dist/*.tar.zst; do
+            uv run --frozen muxtools-build test "$archive" --report "$archive.report.json"
+          done
+      - name: Linux ABI baseline smoke tests
+        if: runner.os == 'Linux' && matrix.package != 'mkvtoolnix' && matrix.package != 'ffmpeg'
+        run: uv run --frozen python builder/baseline-test.py dist/*.tar.zst
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: report-${{ matrix.package }}-${{ matrix.target }}
+          path: dist/*.report.json
+          if-no-files-found: error
+
+  publish:
+    needs: [build, smoke]
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: binary-publishing
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: astral-sh/setup-uv@v10.0.1
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          path: artifacts
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: uv run --frozen muxtools-build publish --artifacts artifacts --repository "$REPOSITORY" --publish

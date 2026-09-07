@@ -1,21 +1,76 @@
-## muxtools-binaries
+# muxtools-binaries
 
-A repo to manage windows and linux (maybe mac at some point) binaries and versions.
+Build and package portable tools for Linux and Windows x86-64.
 
-For windows existing sources for binaries will be used if applicable and for Linux there will be statically linked executables made in this repo.
+Supported packages: fdkaac, FLAC, Opus tools, FFmpeg/FFprobe, MKVToolNix, and multilib x265.
 
-## Dependencies
+Source builds use one manylinux_2_34-derived Linux image; Windows builds cross-compile through MinGW.
+Build tools, LLVM, and MinGW come from the image's repositories.
+The final image digest freezes their versions.
 
-The linux builds here are done on **Ubuntu 22.04** and as such require **glibc 2.35+** (as far as I know).
+- Source-built Linux executables target x86-64-v2 and glibc 2.34.
+- x265 also provides explicit AVX2, AVX512, and zn4 variants, each supporting 8/10/12-bit encoding.
+- Imported packages declare additional runtime requirements where necessary.
 
-Everything that released after 22.04 should also obviously run fine, such as:
-- Debian>=12
-- Fedora>=37
-- Alma/Rocky/RHEL/CentOS-Stream >= **10**
-- Any rolling distro
+## Local development
 
-### Mkvtoolnix
-This is currently a special case because I *really* don't feel like building it with all its dependencies. (Patches welcome however)
+Install Docker and uv, then set up the project and run the checks:
 
-The linux release zip essentially just contains the official AppImage and "symlinks" for the respective cli tools.
-AppImages require some form of libfuse2 installed on the system to work. See the [AppImage Wiki](https://github.com/AppImage/AppImageKit/wiki/FUSE).
+```sh
+uv sync --frozen
+uv run muxtools-build validate
+uv run pytest -q
+uv run mypy
+uv run tombi format --check
+uv run tombi lint --error-on-warnings
+```
+
+Build the local image, then build and test a package:
+
+```sh
+docker build -t muxtools-builder:local -f builder/Dockerfile .
+uv run muxtools-build build flac --target linux-x86_64 --image muxtools-builder:local
+uv run muxtools-build test dist/flac-1.5.0-linux-x86_64.tar.zst
+```
+
+Builds always run when requested, regardless of published versions.
+Windows artifacts must be smoke-tested on Windows; CI supplies native runners.
+
+### Working directories
+
+These directories stay gitignored:
+
+- `build/`: builds, downloads, and source checkouts.
+- `dist/`: final archives.
+- `context/`: local reference material.
+
+### Formatting and commands
+
+Use `uv run tombi format` to format repository TOML files.
+Update PRs format and lint their manifest before opening;
+packaging formats and lints `.metadata.toml` offline before archiving it.
+
+Use `uv run muxtools-build --help` for matrix generation, repackaging, update discovery, and publishing commands.
+
+See [the architecture and artifact contracts](docs/architecture.md) for recipe authoring,
+runtime requirements, and catalog recovery.
+
+## Releases
+
+PRs and pushes build test artifacts only. No automatic upstream update publishes binaries.
+
+Before the first release:
+
+1. Run **Qualify builder**, enabling its publish checkbox to publish the tested image.
+2. Adopt its GHCR digest in `builder/lock.toml`.
+3. Manually run **Build and test** on `main` with **publish** checked.
+
+For subsequent releases, repeat step 3 using the adopted builder.
+Publication defaults to off in both workflows.
+
+### Published artifacts
+
+- Archives use `.tar.zst` on both platforms and contain `.metadata.toml`.
+- The published `versions.json` lives on the `catalog-v1` release.
+
+This is a clean break from the old ZIP/JSON contract; historical releases remain available.

@@ -1,0 +1,47 @@
+name: Discover updates
+on:
+  schedule:
+    - cron: '17 7 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [fdkaac, flac, opus-tools, ffmpeg, mkvtoolnix, x265]
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: main
+      - uses: astral-sh/setup-uv@v10.0.1
+      - name: Resolve updates
+        env:
+          PACKAGE: ${{ matrix.package }}
+        run: uv run --frozen muxtools-build updates --package "$PACKAGE" --apply
+      - name: Format and lint updated manifest
+        env:
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          uv run --frozen tombi format "packages/$PACKAGE/package.toml"
+          uv run --frozen tombi lint --error-on-warnings "packages/$PACKAGE/package.toml"
+      - uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        id: pr
+        with:
+          branch: updates/${{ matrix.package }}
+          title: Update ${{ matrix.package }} sources
+          commit-message: Update ${{ matrix.package }} sources
+          body: Source pins and checksums updated by discovery. Test artifacts require review before manual publishing.
+          add-paths: packages/${{ matrix.package }}/package.toml
+      - name: Request test build
+        if: steps.pr.outputs.pull-request-operation == 'created' || steps.pr.outputs.pull-request-operation == 'updated'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PACKAGE: ${{ matrix.package }}
+        run: gh workflow run build.yml --ref "updates/$PACKAGE" -f packages="$PACKAGE" -F publish=false

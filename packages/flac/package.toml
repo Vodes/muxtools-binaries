@@ -1,0 +1,29 @@
+schema_version = 1
+name = "flac"
+version = "1.5.0"
+version_code = 1
+type = "source-build"
+
+[source]
+repository = "https://github.com/xiph/flac.git"
+tag = "1.5.0"
+commit = "1507800de4b70e21be71f38caa0d9079d0bc6e45"
+
+[dependencies.ogg]
+repository = "https://github.com/xiph/ogg.git"
+tag = "v1.3.6"
+commit = "be05b13e98b048f0b5a0f5fa8ce514d56db5f822"
+
+[targets.linux-x86_64]
+compiler = "gcc"
+lto = false
+cpu_levels = ["baseline"]
+
+[targets.windows-x86_64]
+compiler = "gcc"
+lto = false
+cpu_levels = ["baseline"]
+
+[executables]
+flac = ["--version"]
+metaflac = ["--version"]

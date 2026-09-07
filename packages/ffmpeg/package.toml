@@ -1,0 +1,27 @@
+schema_version = 1
+name = "ffmpeg"
+version = "8.1.2-2026-06-25"
+version_code = 1
+type = "external-build"
+provider = "Vodes/FFmpeg-Builds"
+
+[targets.linux-x86_64.runtime]
+requirements = ["libgcc_s.so.1"]
+
+[targets.linux-x86_64.asset]
+url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-06-25-10-01/ffmpeg-n8.1.2-linux64-nonfree-8.1.tar.xz"
+sha256 = "aa09628022d2f0b763e9473752d0eadc101464b927aa998820ab22987c8f1d37"
+format = "tar.xz"
+
+[targets.windows-x86_64.asset]
+url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-06-25-10-01/ffmpeg-n8.1.2-win64-nonfree-8.1.zip"
+sha256 = "a78a322755d085883c53b709cdbfdadd81fa87b6b691bdfea43f874ad21acc25"
+format = "zip"
+
+[executables]
+ffmpeg = ["-version"]
+ffprobe = ["-version"]
+
+[update]
+kind = "github-release"
+repository = "Vodes/FFmpeg-Builds"

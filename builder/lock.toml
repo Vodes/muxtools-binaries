@@ -1,0 +1,4 @@
+schema_version = 1
+base = "quay.io/pypa/manylinux_2_34_x86_64@sha256:934419fa742ff922855f464203cc0ad5afe3317a8541712a00cf3dc7fb893fc8"
+# Filled by the maintainer with the qualified builder workflow's digest before releasing.
+image = ""

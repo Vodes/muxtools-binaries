@@ -1,0 +1,28 @@
+schema_version = 1
+name = "fdkaac"
+version = "1.0.6-libfdk-2.0.3"
+version_code = 1
+type = "source-build"
+
+[source]
+repository = "https://github.com/nu774/fdkaac.git"
+tag = "v1.0.6"
+commit = "35527e4041f30107f02519af920bcb3e91787329"
+
+[dependencies.fdk]
+repository = "https://github.com/mstorsjo/fdk-aac.git"
+tag = "v2.0.3"
+commit = "716f4394641d53f0d79c9ddac3fa93b03a49f278"
+
+[targets.linux-x86_64]
+compiler = "gcc"
+lto = false
+cpu_levels = ["baseline"]
+
+[targets.windows-x86_64]
+compiler = "gcc"
+lto = false
+cpu_levels = ["baseline"]
+
+[executables]
+fdkaac = ["--help"]
