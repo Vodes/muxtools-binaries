@@ -17,7 +17,9 @@ from muxtools_binaries.audio_testing import (
 SOURCE = Path(__file__).parent / "data/audio/wav_source.wav"
 
 
-@pytest.fixture(params=AUDIO_ENCODERS, ids=lambda encoder: encoder.package)
+@pytest.fixture(
+    params=AUDIO_ENCODERS, ids=lambda encoder: f"{encoder.package}-{'lossless' if encoder.lossless else 'lossy'}"
+)
 def encoder(request) -> AudioEncoder:
     return request.param
 
@@ -27,17 +29,21 @@ def reference():
     return decode_audio(SOURCE)
 
 
-@pytest.mark.parametrize("encoder", AUDIO_ENCODERS, ids=lambda encoder: encoder.package)
+@pytest.mark.parametrize(
+    "encoder", AUDIO_ENCODERS, ids=lambda encoder: f"{encoder.package}-{'lossless' if encoder.lossless else 'lossy'}"
+)
 def test_audio_quality_roundtrip(reference, tmp_path, encoder: AudioEncoder):
-    """Exercise real decoding and scoring for all three output formats."""
+    """Exercise real decoding and scoring with PyAV's default encoder for each output format."""
     output = tmp_path / f"encoded.{encoder.suffix}"
     with av.open(str(SOURCE)) as source, av.open(str(output), "w") as encoded:
         stream = encoded.add_stream(encoded.default_audio_codec, rate=SAMPLE_RATE)
         assert isinstance(stream, av.AudioStream)
         stream.layout = "stereo"
-        if encoder.lossless:
-            stream.codec_context.format = "s32"
-        else:
+        formats = ("s32", "s32p") if encoder.lossless else ("s16", "s16p", "flt", "fltp")
+        stream.codec_context.format = next(
+            format.name for format in stream.codec_context.codec.audio_formats or [] if format.name in formats
+        )
+        if not encoder.lossless:
             stream.bit_rate = 128000
         for frame in source.decode(audio=0):
             encoded.mux(stream.encode(frame))
@@ -104,7 +110,8 @@ def test_encoder_uses_fixture_and_checks_output(tmp_path, monkeypatch, encoder):
         assert args[0] == stage / encoder.command
         assert str(SOURCE.resolve()) in args
         assert kwargs["cwd"] == cwd
-        (cwd / f"{encoder.command}-baseline.{encoder.suffix}").write_bytes(b"corrupt output")
+        output = Path(args[args.index("-o") + 1]) if "-o" in args else Path(args[-1])
+        output.write_bytes(b"corrupt output")
 
     monkeypatch.setattr("muxtools_binaries.audio_testing.run", encode)
     with pytest.raises(ValueError, match=f"{encoder.command}:baseline:"):
@@ -116,9 +123,10 @@ def test_encoder_uses_fixture_and_checks_output(tmp_path, monkeypatch, encoder):
 def test_encoder_must_produce_output(tmp_path, monkeypatch, create_empty_file, encoder):
     variants = {"baseline": encoder.command}
 
-    def encode(*args, **kwargs):
+    def encode(args, **kwargs):
         if create_empty_file:
-            (tmp_path / f"{encoder.command}-baseline.{encoder.suffix}").touch()
+            output = Path(args[args.index("-o") + 1]) if "-o" in args else Path(args[-1])
+            output.touch()
 
     monkeypatch.setattr("muxtools_binaries.audio_testing.run", encode)
     with pytest.raises(ValueError, match="produced no audio output"):

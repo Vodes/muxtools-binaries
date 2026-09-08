@@ -85,7 +85,7 @@ CMake receives target flags alongside upstream Release settings.
 
 Dependencies are built privately for each target/tier:
 
-- The audio recipes build FDK, Ogg, Opus, Opusfile, libopusenc and FLAC as required.
+- The audio recipes build FDK, Ogg, Opus, Opusfile, libopusenc, FLAC and WavPack as required.
 - Opus tools includes FLAC input support.
 - x265 combines its 8-, 10-, and 12-bit builds into each tier executable.
 

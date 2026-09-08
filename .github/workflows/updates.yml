@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [fdkaac, flac, opus-tools, ffmpeg, mkvtoolnix, x265]
+        package: [fdkaac, flac, opus-tools, wavpack, ffmpeg, mkvtoolnix, x265]
     steps:
       - uses: actions/checkout@v7.0.1
         with:

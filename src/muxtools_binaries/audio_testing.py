@@ -31,6 +31,8 @@ AUDIO_ENCODERS = [
     AudioEncoder("flac", "flac", "flac", ("-f", "-o", "{output}", "{source}"), lossless=True),
     AudioEncoder("fdkaac", "fdkaac", "m4a", ("-b", "128", "-o", "{output}", "{source}")),
     AudioEncoder("opus-tools", "opusenc", "opus", ("--bitrate", "128", "{source}", "{output}")),
+    AudioEncoder("wavpack", "wavpack", "wv", ("-y", "{source}", "-o", "{output}"), lossless=True),
+    AudioEncoder("wavpack", "wavpack", "wv", ("-b128", "-y", "{source}", "-o", "{output}")),
 ]
 
 
@@ -83,11 +85,12 @@ def exercise_audio(
     if not source.is_file():
         raise ValueError(f"Missing audio fixture: {source}. Run git submodule update --init --recursive.")
     reference = decode_audio(source)
+    mode = "lossless" if encoder.lossless else "lossy"
     for tier, filename in variants.items():
         if tier not in tiers:
             continue
-        label = f"{encoder.command}:{tier}"
-        output = cwd / f"{encoder.command}-{tier}.{encoder.suffix}"
+        label = f"{encoder.command}:{tier}:{mode}"
+        output = cwd / f"{encoder.command}-{tier}-{mode}.{encoder.suffix}"
         args = [arg.format(source=source, output=output) for arg in encoder.args]
         run([stage / filename, *args], cwd=cwd, timeout=120)
         if not output.is_file() or not output.stat().st_size:

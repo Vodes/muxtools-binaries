@@ -1,0 +1,26 @@
+schema_version = 1
+name = "wavpack"
+version = "5.9.0"
+version_code = 1
+type = "source-build"
+
+[source]
+repository = "https://github.com/dbry/WavPack.git"
+tag = "5.9.0"
+commit = "5803634a030e2a11dba602ba057b89cc34486c67"
+
+[targets.linux-x86_64]
+compiler = "gcc"
+lto = false
+cpu_levels = ["baseline"]
+
+[targets.windows-x86_64]
+compiler = "gcc"
+lto = false
+cpu_levels = ["baseline"]
+
+[executables]
+wavpack = ["--version"]
+wvunpack = ["--version"]
+wvgain = ["-v"]
+wvtag = ["--version"]

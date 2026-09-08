@@ -2,7 +2,7 @@
 
 Build and package portable tools for Linux and Windows x86-64.
 
-Supported packages: fdkaac, FLAC, Opus tools, FFmpeg/FFprobe, MKVToolNix, and multilib x265.
+Supported packages: fdkaac, FLAC, Opus tools, WavPack, FFmpeg/FFprobe, MKVToolNix, and multilib x265.
 
 Source builds use one manylinux_2_34-derived Linux image; Windows builds cross-compile through MinGW.
 Build tools, LLVM, and MinGW come from the image's repositories.
@@ -40,7 +40,9 @@ use a new package version (for example `4.2.post1`) and increment `version_code`
 Windows artifacts must be smoke-tested on Windows; CI supplies native runners.
 
 Audio smoke tests encode `tests/data/audio/wav_source.wav` with each runnable FLAC,
-fdkaac, and Opus encoder variant. PyAV decodes the output, and Zimtohrli compares
+fdkaac, Opus, and WavPack encoder variant. WavPack is tested in both default lossless
+mode and lossy mode (`-b128`, targeting 128 kb/s, without a correction file).
+PyAV decodes the output, and Zimtohrli compares
 each channel at 48 kHz. Tests reject empty or undecodable output, changed channel
 counts, duration differences over 100 ms, silence, and per-channel MOS below 4.5.
 This is a coarse corruption check, not a codec quality benchmark. Scores are printed
