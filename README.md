@@ -17,6 +17,7 @@ The final image digest freezes their versions.
 Install Docker and uv, then set up the project and run the checks:
 
 ```sh
+git submodule update --init --recursive
 uv sync --frozen
 uv run muxtools-build validate
 uv run pytest -q
@@ -37,6 +38,14 @@ Builds always run when requested, regardless of published versions.
 Publishing skips versions that are already published. To release a changed build of the same upstream source,
 use a new package version (for example `4.2.post1`) and increment `version_code`.
 Windows artifacts must be smoke-tested on Windows; CI supplies native runners.
+
+Audio smoke tests encode `tests/data/audio/wav_source.wav` with each runnable FLAC,
+fdkaac, and Opus encoder variant. PyAV decodes the output, and Zimtohrli compares
+each channel at 48 kHz. Tests reject empty or undecodable output, changed channel
+counts, duration differences over 100 ms, silence, and per-channel MOS below 4.5.
+This is a coarse corruption check, not a codec quality benchmark. Scores are printed
+in the test log. When running outside the checkout, pass `--root /path/to/checkout`
+before the `test` command so the fixture can be found.
 
 ### Working directories
 

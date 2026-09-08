@@ -166,7 +166,14 @@ def main() -> int:
         elif args.command == "build":
             _build(root, args)
         elif args.command == "test":
-            print(test_archive(args.archive.resolve(), smoke=not args.structural_only, report=args.report))
+            print(
+                test_archive(
+                    args.archive.resolve(),
+                    smoke=not args.structural_only,
+                    report=args.report,
+                    audio_source=root / "tests/data/audio/wav_source.wav",
+                )
+            )
         elif args.command == "publish":
             from .release import publish
 

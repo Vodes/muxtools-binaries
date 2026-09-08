@@ -5,13 +5,13 @@ import struct
 import subprocess
 import sys
 import tempfile
-import wave
 from pathlib import Path
 from typing import Any, Literal
 
 from cpuinfo import get_cpu_info
 
 from .artifacts import read_metadata, write_report
+from .audio_testing import AUDIO_ENCODERS, exercise_audio
 from .io import Command, extract, run
 
 
@@ -153,19 +153,11 @@ def structural(stage: Path, data: dict[str, Any]) -> None:
                         raise ValueError(f"Unbundled compiler runtime: {library}")
 
 
-def exercise(stage: Path, data: dict[str, Any], cwd: Path, tiers: set[str]) -> None:
+def exercise(stage: Path, data: dict[str, Any], cwd: Path, tiers: set[str], audio_source: Path) -> None:
     name = data["name"]
-    if name in ("flac", "fdkaac", "opus-tools"):
-        wav = cwd / "input.wav"
-        with wave.open(str(wav), "wb") as stream:
-            stream.setparams((2, 2, 48000, 0, "NONE", "not compressed"))
-            stream.writeframes(b"\0" * 48000 * 4)
-        command, args = {
-            "flac": ("flac", ["-f", "-o", str(cwd / "out.flac"), str(wav)]),
-            "fdkaac": ("fdkaac", ["-b", "128", "-o", str(cwd / "out.m4a"), str(wav)]),
-            "opus-tools": ("opusenc", [str(wav), str(cwd / "out.opus")]),
-        }[name]
-        run([stage / data["binaries"][command]["baseline"], *args], cwd=cwd, timeout=120)
+    for encoder in AUDIO_ENCODERS:
+        if name == encoder.package:
+            exercise_audio(stage, encoder, data["binaries"][encoder.command], cwd, tiers, audio_source)
     if name == "x265":
         for tier in tiers:
             for depth in (8, 10, 12):
@@ -213,7 +205,13 @@ def run_smoke(command: Command, package: str, executable: str, *, cwd: Path | No
         raise ValueError(f"Shim did not launch {executable}: {result.stdout}")
 
 
-def test_archive(archive: Path, *, smoke: bool = True, report: Path | None = None) -> list[str]:
+def test_archive(
+    archive: Path,
+    *,
+    smoke: bool = True,
+    report: Path | None = None,
+    audio_source: Path = Path("tests/data/audio/wav_source.wav"),
+) -> list[str]:
     with tempfile.TemporaryDirectory(prefix="muxtools test ") as temporary:
         root = Path(temporary)
         stage = root / "package with spaces"
@@ -242,7 +240,7 @@ def test_archive(archive: Path, *, smoke: bool = True, report: Path | None = Non
                     )
                     tested.add(tier)
                     checks.append(f"run:{executable}:{tier}")
-            exercise(stage, data, cwd, tested)
+            exercise(stage, data, cwd, tested, audio_source)
             checks.append("smoke")
         if report:
             write_report(archive, checks, report)

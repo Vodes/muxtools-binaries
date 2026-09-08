@@ -5,13 +5,16 @@ description = "Pinned portable binary builds and explicit releases"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "av>=16,<17",
     "httpx2>=2,<3",
+    "numpy>=2,<3",
     "packaging>=25",
     "py-cpuinfo2>=10,<11",
     "py7zr>=1,<2",
     "pydantic>=2.11,<3",
     "tombi>=0.7,<1",
     "tomlkit>=0.13,<1",
+    "zimtohrli>=0.2.1.post1,<0.3",
     "zstandard>=0.23,<1",
 ]
 

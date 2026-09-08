@@ -1,0 +1,3 @@
+from numpy.typing import ArrayLike
+
+def mos_from_signals(signal_a: ArrayLike, signal_b: ArrayLike) -> float: ...
