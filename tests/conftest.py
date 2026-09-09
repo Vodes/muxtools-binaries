@@ -17,3 +17,15 @@ def package():
             executables={"example": ["--version"]},
         )
     )
+
+
+@pytest.fixture
+def recipe_root(tmp_path):
+    path = tmp_path / "packages" / "example"
+    path.mkdir(parents=True)
+    (path / "recipe.py").write_text(
+        "from muxtools_binaries.checks import default_checks as checks\n"
+        "from muxtools_binaries.updates import source_update as discover_update\n"
+        "def build(ctx): pass\n"
+    )
+    return tmp_path

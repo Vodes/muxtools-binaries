@@ -1,10 +1,12 @@
 import json
+import shutil
 from unittest.mock import Mock
 
 import httpx2
 import pytest
 
 from muxtools_binaries.artifacts import pack
+from muxtools_binaries.checks import default_checks
 from muxtools_binaries.io import sha256
 from muxtools_binaries.release import (
     GitHub,
@@ -26,11 +28,12 @@ def test_manual_release_gate():
 
 
 @pytest.fixture
-def releases(package, tmp_path, monkeypatch):
+def releases(package, tmp_path, monkeypatch, recipe_root):
     monkeypatch.setenv("GITHUB_SHA", "fixture-revision")
     monkeypatch.setattr("muxtools_binaries.release.load_packages", lambda _: {package.name: package})
     monkeypatch.setattr("muxtools_binaries.release.builder_image", lambda *a, **kw: "fixture-image")
     artifacts = tmp_path / "artifacts"
+    shutil.copytree(recipe_root / "packages", artifacts / "packages")
     for target, config in package.targets.items():
         stage = tmp_path / target
         stage.mkdir()
@@ -39,13 +42,14 @@ def releases(package, tmp_path, monkeypatch):
                 (stage / name).write_bytes(b"fixture")
                 (stage / name).chmod(0o755)
         data = dict(
-            schema_version=1,
+            schema_version=2,
             name=package.name,
             version=package.version,
             version_code=package.version_code,
             target=target,
             binaries=package.binaries(target),
             smoke=package.executables,
+            checks=default_checks(package).model_dump(),
             source=package.source.model_dump(),
             provenance={"type": package.type, "channel": "release"},
             builder={"revision": "fixture-revision", "image": "fixture-image"},
@@ -53,6 +57,7 @@ def releases(package, tmp_path, monkeypatch):
                 include={"compiler", "lto", "cpu_levels", "extra_cflags", "extra_cxxflags", "extra_ldflags"}
             ),
         )
+        data["build"].update(options=package.build, target_options=config.build)
         archive = pack(stage, data, artifacts)
         archive.with_name(archive.name + ".report.json").write_text(
             json.dumps(
@@ -74,6 +79,19 @@ def test_release_requires_complete_verified_artifacts(releases, package, broken)
     else:
         next(releases.glob("*.report.json")).write_text("{}")
     with pytest.raises(ValueError, match="Incomplete|Missing native"):
+        collect(releases, releases)
+
+
+def test_release_rejects_checks_from_a_different_recipe(releases, package):
+    recipe_path = releases / "packages" / package.name / "recipe.py"
+    recipe_path.write_text(
+        recipe_path.read_text() + "\nfrom muxtools_binaries.checks import default_checks\n"
+        "def checks(package, target):\n"
+        "    suite = default_checks(package)\n"
+        "    suite.smoke['example'].stdout_prefix = 'required version'\n"
+        "    return suite\n"
+    )
+    with pytest.raises(ValueError, match="Artifact checks differ"):
         collect(releases, releases)
 
 

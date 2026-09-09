@@ -37,7 +37,16 @@ No UCRT variant is assumed.
 ## Recipes and source state
 
 Each directory under `packages/` has `package.toml` and `recipe.py`.
-The recipe exposes `build(ctx)` and populates `ctx.stage`. It may perform arbitrary producer-side work.
+Recipes expose three hooks:
+
+- `build(ctx)` populates `ctx.stage` using `BuildContext`.
+- `checks(package, target)` returns a `CheckSuite` for that target.
+- `discover_update(ctx)` returns an updated manifest dictionary using `UpdateContext`.
+
+Recipes may import helpers relative to their own directory. Simple recipes can re-export
+`build_autotools`, `default_checks`, or `source_update` as their hooks.
+Package-specific build procedures, upstream naming rules, and check definitions live here;
+shared source contains the execution machinery.
 
 `BuildContext` supplies checked processes, verified downloads, source checkout,
 isolated dependency prefixes, and target flags.
@@ -55,6 +64,40 @@ The manifest contains:
 - An HTTPS URL, SHA-256, and archive format for each imported target.
 - An `executables` table mapping logical executable names to smoke-test arguments.
 - Optional runtime requirements and explicit reasons for imported glibc exceptions.
+- `[build]` holds build options; `[targets.<target>.build]` overrides them for one target.
+- `[update]` holds recipe-specific update settings, where needed.
+
+### Build options
+
+TOML owns chosen compiler flags, configure options, CMake definitions, and feature switches.
+Recipes own the procedure and values derived from that procedure, such as multilib paths.
+An optional recipe `Options` model validates `[build]`; `UpdateOptions` validates `[update]`.
+Recipes without these schemas accept only empty corresponding tables.
+`recipe_options(package, target, Options)` merges nested target tables into the common options;
+scalars and arrays replace their common values. Neither original table is mutated.
+
+For Autotools recipes, `AutotoolsOptions` provides `configure = [...]` and
+`[build.dependencies]` mapping dependency names to configure argument arrays.
+Dependencies build in manifest order into a private prefix.
+
+For example, x265 defines:
+
+```toml
+[build]
+bit_depths = [8, 10, 12]
+
+[build.cmake]
+CMAKE_BUILD_TYPE = "Release"
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"
+ENABLE_SHARED = false
+ENABLE_ASSEMBLY = true
+ENABLE_LIBNUMA = false
+```
+
+Its recipe validates the depths, builds higher-depth libraries first, and links them into
+the 8-bit CLI. It derives multilib CMake definitions and matching video checks from the selected depths.
+`BuildContext.cmake()` adds the selected compiler and cross-toolchain settings and translates
+boolean definitions to `ON`/`OFF`.
 
 ### Version identity
 
@@ -114,8 +157,13 @@ Build and packaging times can differ between runs, so identical binaries can pro
 
 ### Metadata and executable variants
 
-Metadata schema version 1 records identity, explicit target, source/dependency pins, provenance,
+Metadata schema version 2 records identity, explicit target, source/dependency pins, provenance,
 test/release channel, builder image/repository revision, and source compiler/linker versions.
+It also stores the recipe's declarative check suite and common/target build options.
+Manifest and public catalog schemas remain version 1.
+
+Schema 1 archives remain readable for catalog recovery. Native tests and new publication require
+schema 2; rebuild older archives to include their recipe checks. Archive testing never loads the current recipe.
 
 Build settings record deliberate extras rather than an exhaustive effective-flag dump.
 CI logs retain commands and diagnostics.
@@ -161,6 +209,20 @@ ELF versions, and missing runtime libraries.
 Native tests download and extract archives into a path containing spaces, invoke every baseline,
 and run small functional encodes.
 Source-built Linux baselines additionally launch in AlmaLinux 9 without the builder toolbox.
+The baseline runner selects these by provenance, without a package-name list.
+
+`CheckSuite.smoke` maps every logical executable to a `CommandCheck`: arguments, accepted exit
+codes, optional stdout prefix/substrings, and a timeout. Its arguments must match `[executables]`.
+`CheckSuite.functional` contains `AudioCheck` and `VideoCheck` definitions with encoder arguments
+and output suffixes. Arguments can use `{source}` and `{output}` placeholders; video checks also
+provide `{width}`, `{height}`, and `{bit_depth}` for a generated single-frame YUV420 input.
+Each functional check gets a separate working directory and runs only eligible executable variants.
+Audio checks retain the shared decoder and quality scoring; video checks require nonempty output.
+
+`CheckSuite.files` declares formats for wrappers and required private executable resources.
+Undeclared executables must match the target's native format. ELF and runtime checks still apply
+to all bundled native files. Unknown check kinds, missing executable references, and unsafe file
+paths fail validation. Release collection compares stored checks and build options with the current recipe and manifest.
 
 ### CPU eligibility
 
@@ -175,12 +237,18 @@ This does not provide performance guarantees.
 
 ### Unit coverage
 
-The unit suite uses synthetic packages rather than current binary versions or checksums.
+The shared unit suite uses synthetic packages rather than current binary versions or checksums.
 It focuses on archive safety/round-tripping, CPU eligibility, runtime-linking overrides,
 release gates/integrity, and update selection.
 
-Real builds and native smoke tests cover package-specific behavior.
+Package-specific unit tests live in `packages/<name>/tests/` and are discovered by the normal pytest command.
+Real builds and native smoke tests additionally cover package-specific behavior.
 HTTP operations use httpx2; upload tests use its mock transport instead of a simulated GitHub service.
+
+CI discovers package directories automatically, including for scheduled updates. Changes anywhere
+inside one package directory select only that package for builds. Adding a recipe and local tests
+does not require editing a central registry. Shared framework, shared tests, toolchain, and workflow
+changes still select all packages.
 
 ## Publishing
 

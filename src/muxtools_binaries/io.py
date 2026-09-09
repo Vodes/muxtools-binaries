@@ -25,6 +25,7 @@ def run(
     env: Mapping[str, str] | None = None,
     capture: bool = False,
     timeout: float | None = None,
+    input: str | None = None,
 ) -> subprocess.CompletedProcess[str]:
     command = [str(arg) for arg in args]
     print("+ " + " ".join(command), flush=True)
@@ -36,7 +37,8 @@ def run(
         text=True,
         capture_output=capture,
         timeout=timeout,
-        stdin=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL if input is None else None,
+        input=input,
     )
 
 

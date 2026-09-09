@@ -1,4 +1,3 @@
-import importlib.util
 import os
 import re
 import shlex
@@ -8,8 +7,12 @@ import tomllib
 from collections.abc import Sequence
 from pathlib import Path
 
+from pydantic import Field
+
+from .checks import CheckSuite
 from .io import download, run
-from .models import Package, Source
+from .models import Model, Package, Source
+from .recipes import load_recipe, recipe_checks, recipe_options
 
 CPU_FLAGS = {
     "baseline": ["-march=x86-64-v2"],
@@ -18,6 +21,25 @@ CPU_FLAGS = {
     "zn4": ["-march=znver4", "-mno-sse4a", "-mno-avx512bf16"],
 }
 TRIPLE = "x86_64-w64-mingw32"
+
+
+class AutotoolsOptions(Model):
+    configure: list[str] = Field(default_factory=list)
+    dependencies: dict[str, list[str]] = Field(default_factory=dict)
+
+
+def build_autotools(ctx: "BuildContext") -> None:
+    options = recipe_options(ctx.package, ctx.target, AutotoolsOptions)
+    if options.dependencies.keys() - ctx.package.dependencies.keys():
+        raise ValueError("Configure options reference unknown dependencies")
+    if ctx.package.source is None:
+        raise ValueError("Autotools builds require a source pin")
+    for tier in ctx.config.cpu_levels:
+        ctx.tier = tier
+        for name, pin in ctx.package.dependencies.items():
+            ctx.autotools(name, ctx.source(name, pin), options.dependencies.get(name, []))
+        ctx.autotools(ctx.package.name, ctx.source(ctx.package.name, ctx.package.source), options.configure)
+        ctx.stage_binaries()
 
 
 class BuildContext:
@@ -141,10 +163,9 @@ class BuildContext:
         run(["make", "install"], cwd=build, env=env)
 
     def stage_binaries(self) -> None:
-        for executable, variants in self.package.binaries(self.target).items():
+        for executable in self.package.executables:
             source = self.prefix / "bin" / (executable + (".exe" if self.windows else ""))
-            shutil.copy2(source, self.stage / variants[self.tier])
-            (self.stage / variants[self.tier]).chmod(0o755)
+            self.stage_binary(source, executable)
 
     def asset(self) -> Path:
         asset = self.config.asset
@@ -152,8 +173,39 @@ class BuildContext:
             raise ValueError("No imported asset configured")
         return download(asset.url, asset.sha256, self.cache)
 
+    def cmake(self, name: str, source: Path, definitions: dict[str, str | bool | int]) -> Path:
+        env = self.environment()
+        build = self.work / self.tier / name
+        options: dict[str, str | bool | int] = dict(definitions)
+        options.update(
+            CMAKE_INSTALL_PREFIX=str(self.prefix),
+            CMAKE_C_COMPILER=env["CC"],
+            CMAKE_CXX_COMPILER=env["CXX"],
+            CMAKE_AR=shutil.which(env["AR"]) or env["AR"],
+            CMAKE_RANLIB=shutil.which(env["RANLIB"]) or env["RANLIB"],
+            CMAKE_EXE_LINKER_FLAGS=env["LDFLAGS"],
+        )
+        if self.windows:
+            options.update(
+                CMAKE_SYSTEM_NAME="Windows",
+                CMAKE_SYSTEM_PROCESSOR="x86_64",
+                CMAKE_LINK_DEPENDS_USE_LINKER=False,
+                CMAKE_RC_COMPILER=env["WINDRES"],
+            )
+        args = [
+            f"-D{key}={'ON' if value is True else 'OFF' if value is False else value}" for key, value in options.items()
+        ]
+        run(["cmake", "-S", source, "-B", build, "-G", "Ninja", *args], env=env)
+        run(["cmake", "--build", build, "--parallel", self.jobs], env=env)
+        return build
 
-def produce(root: Path, package: Package, target: str, jobs: int) -> tuple[Path, BuildContext]:
+    def stage_binary(self, source: Path, executable: str) -> None:
+        destination = self.stage / self.package.binaries(self.target)[executable][self.tier]
+        shutil.copy2(source, destination)
+        destination.chmod(0o755)
+
+
+def produce(root: Path, package: Package, target: str, jobs: int) -> tuple[Path, CheckSuite]:
     if os.environ.get("MUXTOOLS_BUILDER") != "1":
         raise ValueError("Builds must run inside the builder image; use the build command without --inside")
     workroot = root / "build" / package.name / target
@@ -162,12 +214,8 @@ def produce(root: Path, package: Package, target: str, jobs: int) -> tuple[Path,
     stage = work / "stage"
     stage.mkdir()
     context = BuildContext(root, package, target, work, stage, jobs)
-    recipe_path = root / "packages" / package.name / "recipe.py"
-    spec = importlib.util.spec_from_file_location(f"recipe_{package.name}", recipe_path)
-    if spec is None or spec.loader is None:
-        raise ValueError(f"Cannot load {recipe_path}")
-    recipe = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(recipe)
+    recipe = load_recipe(root, package.name)
+    checks = recipe_checks(recipe, package, target)
     recipe.build(context)
     if context.windows and package.type == "source-build":
         sysroot = Path(run([f"{TRIPLE}-gcc", "-print-sysroot"], capture=True).stdout.strip())
@@ -179,7 +227,7 @@ def produce(root: Path, package: Package, target: str, jobs: int) -> tuple[Path,
                     if len(matches) != 1:
                         raise ValueError(f"Cannot locate compiler runtime {library}")
                     shutil.copy2(matches[0], stage / library)
-    return stage, context
+    return stage, checks
 
 
 def builder_image(root: Path, override: str | None = None, release: bool = False) -> str:

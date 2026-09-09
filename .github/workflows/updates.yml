@@ -6,7 +6,21 @@ on:
 permissions:
   contents: read
 jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      packages: ${{ steps.packages.outputs.packages }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: main
+      - uses: astral-sh/setup-uv@v10.0.1
+      - id: packages
+        run: |
+          packages=$(uv run --frozen python -c 'import json; from pathlib import Path; from muxtools_binaries.models import load_packages; print(json.dumps(list(load_packages(Path.cwd()))))')
+          echo "packages=$packages" >> "$GITHUB_OUTPUT"
   discover:
+    needs: prepare
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -15,7 +29,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [fdkaac, flac, opus-tools, wavpack, ffmpeg, mkvtoolnix, x265]
+        package: ${{ fromJSON(needs.prepare.outputs.packages) }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:

@@ -121,7 +121,13 @@ def _validate_package(data: dict[str, Any], package: Package) -> None:
         raise ValueError("Artifact executable mapping differs from package definition")
 
 
-def _validate_target(data: dict[str, Any], package: Package) -> None:
+def _validate_target(data: dict[str, Any], package: Package, root: Path) -> None:
+    from .checks import archive_checks
+    from .recipes import load_recipe, recipe_checks
+
+    actual_checks = archive_checks(data)
+    if actual_checks != recipe_checks(load_recipe(root, package.name), package, data["target"]):
+        raise ValueError("Artifact checks differ from package recipe")
     config = package.targets[data["target"]]
     if data["smoke"] != package.executables:
         raise ValueError("Artifact smoke commands differ from package definition")
@@ -130,6 +136,11 @@ def _validate_target(data: dict[str, Any], package: Package) -> None:
     expected_runtime = config.runtime.model_dump(exclude_defaults=True) if data["target"].startswith("linux") else {}
     if data.get("runtime", {}) != expected_runtime:
         raise ValueError("Artifact runtime differs from package definition")
+    if (
+        data.get("build", {}).get("options") != package.build
+        or data.get("build", {}).get("target_options") != config.build
+    ):
+        raise ValueError("Artifact build options differ from package definition")
     if package.type == "source-build":
         for key in ("compiler", "lto", "cpu_levels", "extra_cflags", "extra_cxxflags", "extra_ldflags"):
             if data.get("build", {}).get(key) != getattr(config, key):
@@ -164,7 +175,7 @@ def collect(root: Path, artifacts: Path) -> ReleaseArtifacts:
             root, release=True
         ):
             raise ValueError("Artifact revision or builder is not eligible for publishing")
-        _validate_target(data, package)
+        _validate_target(data, package, root)
         _require_native_report(artifacts, archive, digest, package, data["target"])
         group = groups.setdefault(package.name, {})
         if data["target"] in group:

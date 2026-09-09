@@ -11,7 +11,8 @@ from typing import Any, Literal
 from cpuinfo import get_cpu_info
 
 from .artifacts import read_metadata, write_report
-from .audio_testing import AUDIO_ENCODERS, exercise_audio
+from .audio_testing import exercise_audio
+from .checks import AudioCheck, CheckSuite, CommandCheck, archive_checks
 from .io import Command, extract, run
 
 
@@ -101,15 +102,17 @@ def binary_format(path: Path) -> Literal["elf", "pe", "script"]:
     raise ValueError(f"Unknown executable format: {path}")
 
 
-def structural(stage: Path, data: dict[str, Any]) -> None:
+def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = None) -> None:
     expected = "pe" if data["target"].startswith("windows") else "elf"
+    files = suite.files if suite else {}
     for variants in data["binaries"].values():
         for filename in variants.values():
             kind = binary_format(stage / filename)
-            if kind != expected and not (kind == "script" and data["name"] == "mkvtoolnix" and expected == "elf"):
+            if kind != files.get(filename, expected):
                 raise ValueError(f"Wrong target format: {filename}")
-    if (stage / "MKVToolNix.AppImage").exists():
-        binary_format(stage / "MKVToolNix.AppImage")
+    for filename, expected_format in files.items():
+        if binary_format(stage / filename) != expected_format:
+            raise ValueError(f"Wrong required file format: {filename}")
     if os.name == "nt":
         return
     minimum = tuple(map(int, data.get("runtime", {}).get("glibc", "2.34").split(".")))
@@ -123,7 +126,6 @@ def structural(stage: Path, data: dict[str, Any]) -> None:
         "libresolv.so.2",
         "ld-linux-x86-64.so.2",
         "libutil.so.1",
-        "libfuse.so.2",
     }
     allowed.update(data.get("runtime", {}).get("requirements", []))
     for path in stage.rglob("*"):
@@ -153,56 +155,45 @@ def structural(stage: Path, data: dict[str, Any]) -> None:
                         raise ValueError(f"Unbundled compiler runtime: {library}")
 
 
-def exercise(stage: Path, data: dict[str, Any], cwd: Path, tiers: set[str], audio_source: Path) -> None:
-    name = data["name"]
-    for encoder in AUDIO_ENCODERS:
-        if name == encoder.package:
-            exercise_audio(stage, encoder, data["binaries"][encoder.command], cwd, tiers, audio_source)
-    if name == "x265":
-        for tier in tiers:
-            for depth in (8, 10, 12):
-                source = cwd / f"input-{depth}.yuv"
-                source.write_bytes(b"\0" * (64 * 64 * 3 // 2 * (1 if depth == 8 else 2)))
-                output = cwd / f"{tier}-{depth}.hevc"
-                run(
-                    [
-                        stage / data["binaries"]["x265"][tier],
-                        "--input",
-                        source,
-                        "--input-res",
-                        "64x64",
-                        "--fps",
-                        "24",
-                        "--input-depth",
-                        depth,
-                        "--output-depth",
-                        depth,
-                        "--frames",
-                        "1",
-                        "--preset",
-                        "ultrafast",
-                        "-o",
-                        output,
-                    ],
-                    cwd=cwd,
-                    timeout=120,
+def exercise(
+    stage: Path, data: dict[str, Any], suite: CheckSuite, cwd: Path, tiers: set[str], audio_source: Path
+) -> None:
+    for index, check in enumerate(suite.functional):
+        work = cwd / f"check-{index}"
+        work.mkdir()
+        variants = data["binaries"][check.command]
+        if isinstance(check, AudioCheck):
+            exercise_audio(stage, check, variants, work, tiers, audio_source)
+            continue
+        source = work / "input.yuv"
+        source.write_bytes(bytes(check.width * check.height * 3 // 2 * (1 if check.bit_depth == 8 else 2)))
+        for tier, filename in variants.items():
+            if tier not in tiers:
+                continue
+            output = work / f"{tier}.{check.suffix}"
+            args = [
+                arg.format(
+                    source=source, output=output, width=check.width, height=check.height, bit_depth=check.bit_depth
                 )
-                if not output.stat().st_size:
-                    raise ValueError("x265 produced empty output")
+                for arg in check.args
+            ]
+            run([stage / filename, *args], cwd=work, timeout=120)
+            if not output.is_file() or not output.stat().st_size:
+                raise ValueError(f"{check.command}:{tier} produced no video output")
 
 
-def run_smoke(command: Command, package: str, executable: str, *, cwd: Path | None = None) -> None:
+def run_smoke(command: Command, check: CommandCheck, *, cwd: Path | None = None) -> None:
     try:
-        result = run(command, cwd=cwd, timeout=60, capture=package in ("fdkaac", "mkvtoolnix"))
+        result = run(command, cwd=cwd, timeout=check.timeout, capture=True)
+        code, stdout = result.returncode, result.stdout
     except subprocess.CalledProcessError as error:
-        # fdkaac deliberately returns 1 for its help command; it has no --version.
-        if package != "fdkaac" or error.returncode != 1 or not (error.stdout or "").startswith("fdkaac "):
+        code, stdout = error.returncode, error.stdout or ""
+        if code not in check.exit_codes:
             raise
-        if "Usage: fdkaac" not in error.stdout or "--help" not in command:
-            raise
-        return
-    if package == "mkvtoolnix" and not result.stdout.startswith(executable + " v"):
-        raise ValueError(f"Shim did not launch {executable}: {result.stdout}")
+    if code not in check.exit_codes:
+        raise ValueError(f"Unexpected exit code {code}: {command}")
+    if not stdout.startswith(check.stdout_prefix) or any(text not in stdout for text in check.stdout_contains):
+        raise ValueError(f"Unexpected smoke output for {command}: {stdout}")
 
 
 def test_archive(
@@ -217,12 +208,14 @@ def test_archive(
         stage = root / "package with spaces"
         extract(archive, stage, "tar.zst")
         data = read_metadata(stage)
-        structural(stage, data)
+        suite = archive_checks(data) if data["schema_version"] == 2 else None
+        structural(stage, data, suite)
         checks = ["structure"]
         if smoke:
             target_os = "windows" if os.name == "nt" else "linux"
             if not data["target"].startswith(target_os) or platform.machine().lower() not in ("amd64", "x86_64"):
                 raise ValueError("Smoke tests require the native target runner")
+            suite = suite or archive_checks(data)
             features, xcr0 = cpu_state()
             tested = {"baseline"}
             cwd = root / "unrelated directory"
@@ -233,14 +226,13 @@ def test_archive(
                         checks.append(f"skip:{executable}:{tier}")
                         continue
                     run_smoke(
-                        [stage / filename, *data["smoke"][executable]],
-                        data["name"],
-                        executable,
+                        [stage / filename, *suite.smoke[executable].args],
+                        suite.smoke[executable],
                         cwd=cwd,
                     )
                     tested.add(tier)
                     checks.append(f"run:{executable}:{tier}")
-            exercise(stage, data, cwd, tested, audio_source)
+            exercise(stage, data, suite, cwd, tested, audio_source)
             checks.append("smoke")
         if report:
             write_report(archive, checks, report)

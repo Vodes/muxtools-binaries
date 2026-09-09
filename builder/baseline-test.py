@@ -5,6 +5,7 @@ import tempfile
 from pathlib import Path
 
 from muxtools_binaries.artifacts import read_metadata
+from muxtools_binaries.checks import archive_checks
 from muxtools_binaries.io import extract
 from muxtools_binaries.testing import run_smoke
 
@@ -16,7 +17,8 @@ def main() -> None:
             extract(Path(argument), stage, "tar.zst")
             data = read_metadata(stage)
             if data["provenance"]["type"] != "source-build":
-                raise ValueError("This check is for source-built packages")
+                continue
+            suite = archive_checks(data)
             for name, variants in data["binaries"].items():
                 run_smoke(
                     [
@@ -28,10 +30,9 @@ def main() -> None:
                         f"{stage}:/package:ro",
                         "almalinux:9",
                         f"/package/{variants['baseline']}",
-                        *data["smoke"][name],
+                        *suite.smoke[name].args,
                     ],
-                    data["name"],
-                    name,
+                    suite.smoke[name],
                 )
 
 

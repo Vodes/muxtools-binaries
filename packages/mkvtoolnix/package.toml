@@ -23,6 +23,3 @@ mkvmerge = ["--version"]
 mkvextract = ["--version"]
 mkvinfo = ["--version"]
 mkvpropedit = ["--version"]
-
-[update]
-kind = "mkvtoolnix"

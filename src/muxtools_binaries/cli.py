@@ -9,8 +9,10 @@ import httpx2
 
 from .artifacts import metadata, pack, read_metadata
 from .build import builder_image, produce
+from .checks import archive_checks
 from .io import run
 from .models import load_packages
+from .recipes import load_recipe, recipe_checks
 from .testing import structural, test_archive
 
 
@@ -144,9 +146,9 @@ def _build(root: Path, args: argparse.Namespace) -> None:
     if not args.inside:
         _build_in_container(root, args, image, revision)
     else:
-        stage, _ = produce(root, package, args.target, args.jobs)
-        data = metadata(package, args.target, revision, image, args.channel)
-        structural(stage, data)
+        stage, checks = produce(root, package, args.target, args.jobs)
+        data = metadata(package, args.target, revision, image, args.channel, checks)
+        structural(stage, data, checks)
         print(pack(stage, data, root / "dist"))
 
 
@@ -156,10 +158,15 @@ def main() -> int:
     try:
         if args.command == "validate":
             packages = load_packages(root)
+            for package in packages.values():
+                recipe = load_recipe(root, package.name)
+                for target in package.targets:
+                    recipe_checks(recipe, package, target)
             print(f"Validated {len(packages)} packages")
         elif args.command == "package":
             data = read_metadata(args.stage)
-            structural(args.stage, data)
+            suite = archive_checks(data) if data["schema_version"] == 2 else None
+            structural(args.stage, data, suite)
             print(pack(args.stage, data, args.output))
         elif args.command == "matrix":
             print(json.dumps(_matrix(root, args.packages, args.changed_from)))

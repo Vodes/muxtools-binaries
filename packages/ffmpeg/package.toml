@@ -23,5 +23,4 @@ ffmpeg = ["-version"]
 ffprobe = ["-version"]
 
 [update]
-kind = "github-release"
 repository = "Vodes/FFmpeg-Builds"

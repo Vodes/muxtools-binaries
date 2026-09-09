@@ -1,7 +1,7 @@
 import re
 import tomllib
 from pathlib import Path, PurePosixPath
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -61,6 +61,7 @@ class Target(Model):
     extra_ldflags: list[str] = Field(default_factory=list)
     runtime: Runtime = Field(default_factory=Runtime)
     asset: Asset | None = None
+    build: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def choices(self) -> Self:
@@ -69,12 +70,6 @@ class Target(Model):
         if self.compiler == "gcc" and self.lto == "thin":
             raise ValueError("GCC does not support thin LTO")
         return self
-
-
-class Update(Model):
-    kind: Literal["git-tags", "github-release", "mkvtoolnix"] = "git-tags"
-    repository: str = ""
-    tag_pattern: str = r"v?(\d+(?:\.\d+)+)"
 
 
 class Package(Model):
@@ -88,7 +83,8 @@ class Package(Model):
     dependencies: dict[str, Source] = Field(default_factory=dict)
     targets: dict[str, Target]
     executables: dict[str, list[str]]
-    update: Update = Field(default_factory=Update)
+    build: dict[str, Any] = Field(default_factory=dict)
+    update: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def contract(self) -> Self:

@@ -51,6 +51,12 @@ before the `test` command so the fixture can be found.
 
 ### Working directories
 
+Each `packages/<name>/` directory owns its TOML build settings, recipe hooks for building/checks/updates,
+and optional `tests/`. Shared code supplies the toolchains, check runners, and release machinery.
+New archives carry their recipe's check definitions in metadata schema 2, so testing them does not
+depend on the current recipe. Older schema 1 archives remain readable for catalog recovery;
+rebuild them for native testing with the new runner.
+
 These directories stay gitignored:
 
 - `build/`: builds, downloads, and source checkouts.
@@ -73,6 +79,8 @@ runtime requirements, and catalog recovery.
 PRs and pushes to `main` build test artifacts only. No automatic upstream update publishes binaries.
 Automatic builds select packages changed under `packages/<name>/`, comparing PRs with their base
 and pushes with the previous branch commit. Documentation and editor-only changes do not select builds.
+Adding a package or changing its local tests selects that package; build and update workflows discover
+packages automatically.
 Shared changes (including `src/`, `tests/`, `builder/`, workflows, and dependency configuration)
 rebuild every package. If the previous push commit is unavailable, every package is built.
 Manual runs build all packages unless the `packages` input selects specific names.

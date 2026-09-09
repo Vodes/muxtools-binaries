@@ -1,7 +1,6 @@
 """Encode the real audio fixture and check the decoded signal for gross damage."""
 
 import math
-from dataclasses import dataclass
 from pathlib import Path
 
 import av
@@ -9,6 +8,7 @@ import numpy as np
 from numpy.typing import NDArray
 from zimtohrli import mos_from_signals
 
+from .checks import AudioCheck
 from .io import run
 
 SAMPLE_RATE = 48000
@@ -16,24 +16,6 @@ SAMPLE_RATE = 48000
 MIN_MOS = 4.5
 # Allow codec delay/padding, but reject truncated or stretched audio.
 MAX_LENGTH_DIFFERENCE = SAMPLE_RATE // 10
-
-
-@dataclass(frozen=True)
-class AudioEncoder:
-    package: str
-    command: str
-    suffix: str
-    args: tuple[str, ...]
-    lossless: bool = False
-
-
-AUDIO_ENCODERS = [
-    AudioEncoder("flac", "flac", "flac", ("-f", "-o", "{output}", "{source}"), lossless=True),
-    AudioEncoder("fdkaac", "fdkaac", "m4a", ("-b", "128", "-o", "{output}", "{source}")),
-    AudioEncoder("opus-tools", "opusenc", "opus", ("--bitrate", "128", "{source}", "{output}")),
-    AudioEncoder("wavpack", "wavpack", "wv", ("-y", "{source}", "-o", "{output}"), lossless=True),
-    AudioEncoder("wavpack", "wavpack", "wv", ("-b128", "-y", "{source}", "-o", "{output}")),
-]
 
 
 def decode_audio(path: Path) -> NDArray[np.float32]:
@@ -79,7 +61,7 @@ def audio_quality(reference: NDArray[np.float32], decoded: NDArray[np.float32]) 
 
 
 def exercise_audio(
-    stage: Path, encoder: AudioEncoder, variants: dict[str, str], cwd: Path, tiers: set[str], source: Path
+    stage: Path, encoder: AudioCheck, variants: dict[str, str], cwd: Path, tiers: set[str], source: Path
 ) -> None:
     source = source.resolve()
     if not source.is_file():

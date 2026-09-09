@@ -4,6 +4,10 @@ version = "0.2-libopus-1.6.1"
 version_code = 2
 type = "source-build"
 
+[build.dependencies]
+opusfile = ["--disable-http"]
+flac = ["--disable-doxygen-docs", "--disable-cpplibs"]
+
 [source]
 repository = "https://github.com/xiph/opus-tools.git"
 tag = "v0.2"

@@ -4,6 +4,9 @@ version = "1.5.0"
 version_code = 1
 type = "source-build"
 
+[build]
+configure = ["--disable-doxygen-docs", "--disable-cpplibs"]
+
 [source]
 repository = "https://github.com/xiph/flac.git"
 tag = "1.5.0"

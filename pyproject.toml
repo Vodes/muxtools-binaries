@@ -40,7 +40,8 @@ explicit_package_bases = true
 mypy_path = ["$MYPY_CONFIG_FILE_DIR/src", "$MYPY_CONFIG_FILE_DIR/stubs"]
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
+addopts = "--import-mode=importlib"
+testpaths = ["tests", "packages"]
 
 [tool.ruff]
 line-length = 120

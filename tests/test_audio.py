@@ -5,23 +5,20 @@ import numpy as np
 import pytest
 
 from muxtools_binaries.audio_testing import (
-    AUDIO_ENCODERS,
     MIN_MOS,
     SAMPLE_RATE,
-    AudioEncoder,
     audio_quality,
     decode_audio,
     exercise_audio,
 )
+from muxtools_binaries.checks import AudioCheck
 
 SOURCE = Path(__file__).parent / "data/audio/wav_source.wav"
 
 
-@pytest.fixture(
-    params=AUDIO_ENCODERS, ids=lambda encoder: f"{encoder.package}-{'lossless' if encoder.lossless else 'lossy'}"
-)
-def encoder(request) -> AudioEncoder:
-    return request.param
+@pytest.fixture
+def encoder() -> AudioCheck:
+    return AudioCheck(command="example", suffix="wav", args=["-o", "{output}", "{source}"])
 
 
 @pytest.fixture(scope="module")
@@ -29,21 +26,19 @@ def reference():
     return decode_audio(SOURCE)
 
 
-@pytest.mark.parametrize(
-    "encoder", AUDIO_ENCODERS, ids=lambda encoder: f"{encoder.package}-{'lossless' if encoder.lossless else 'lossy'}"
-)
-def test_audio_quality_roundtrip(reference, tmp_path, encoder: AudioEncoder):
+@pytest.mark.parametrize("suffix,lossless", [("wav", True), ("m4a", False)])
+def test_audio_quality_roundtrip(reference, tmp_path, suffix, lossless):
     """Exercise real decoding and scoring with PyAV's default encoder for each output format."""
-    output = tmp_path / f"encoded.{encoder.suffix}"
+    output = tmp_path / f"encoded.{suffix}"
     with av.open(str(SOURCE)) as source, av.open(str(output), "w") as encoded:
-        stream = encoded.add_stream(encoded.default_audio_codec, rate=SAMPLE_RATE)
+        stream = encoded.add_stream("pcm_s32le" if lossless else encoded.default_audio_codec, rate=SAMPLE_RATE)
         assert isinstance(stream, av.AudioStream)
         stream.layout = "stereo"
-        formats = ("s32", "s32p") if encoder.lossless else ("s16", "s16p", "flt", "fltp")
+        formats = ("s32", "s32p") if lossless else ("s16", "s16p", "flt", "fltp")
         stream.codec_context.format = next(
             format.name for format in stream.codec_context.codec.audio_formats or [] if format.name in formats
         )
-        if not encoder.lossless:
+        if not lossless:
             stream.bit_rate = 128000
         for frame in source.decode(audio=0):
             encoded.mux(stream.encode(frame))
@@ -51,7 +46,7 @@ def test_audio_quality_roundtrip(reference, tmp_path, encoder: AudioEncoder):
     scores = audio_quality(reference, decode_audio(output))
     assert len(scores) == 2
     assert min(scores) >= MIN_MOS
-    if encoder.lossless:
+    if lossless:
         assert scores == pytest.approx([5.0, 5.0])
 
 

@@ -13,6 +13,7 @@ import tomlkit
 from packaging.version import InvalidVersion, Version
 
 from .models import Package, load_packages
+from .recipes import load_recipe, recipe_checks
 
 
 def latest_tag(source: dict[str, Any]) -> dict[str, Any]:
@@ -51,67 +52,45 @@ def remote_hash(url: str) -> str:
     return digest.hexdigest()
 
 
-def update_definition(data: dict[str, Any]) -> dict[str, Any]:
-    updated = copy.deepcopy(data)
-    kind = data.get("update", {}).get("kind", "git-tags")
-    if kind == "git-tags":
-        updated["source"] = latest_tag(data["source"])
-        if "dependencies" in data:
-            updated["dependencies"] = {name: latest_tag(source) for name, source in data["dependencies"].items()}
-        version = updated["source"]["tag"].removeprefix("v")
-        if data["name"] == "fdkaac":
-            version += "-libfdk-" + updated["dependencies"]["fdk"]["tag"].removeprefix("v")
-        if data["name"] == "opus-tools":
-            version += "-libopus-" + updated["dependencies"]["opus"]["tag"].removeprefix("v")
-        if updated["source"] != data["source"] or updated.get("dependencies") != data.get("dependencies"):
-            updated["version"] = version
-    elif kind == "github-release":
-        repository = data["update"]["repository"]
-        releases = get_json(f"https://api.github.com/repos/{repository}/releases?per_page=100")
-        release = next(
-            (r for r in releases if not r["draft"] and not r["prerelease"] and r["tag_name"].startswith("autobuild-")),
-            None,
-        )
-        if not release:
-            raise ValueError("No dated FFmpeg release available")
-        source_versions = set()
-        for target, config in updated["targets"].items():
-            suffix = r"linux64-nonfree-[\d.]+\.tar\.xz" if target.startswith("linux") else r"win64-nonfree-[\d.]+\.zip"
-            pattern = r"ffmpeg-n(\d+(?:\.\d+)+(?:-\d+-g[0-9a-f]+)?)-" + suffix
-            matches = [(a, re.fullmatch(pattern, a["name"])) for a in release["assets"]]
-            matches = [(asset, match) for asset, match in matches if match]
-            if len(matches) != 1:
-                raise ValueError(f"Ambiguous or missing FFmpeg artifact for {target}")
-            asset, match = matches[0]
-            source_versions.add(match[1])
-            config["asset"]["url"] = asset["browser_download_url"]
-            config["asset"]["sha256"] = (asset.get("digest") or "").removeprefix("sha256:") or remote_hash(
-                asset["browser_download_url"]
-            )
-        if len(source_versions) != 1:
-            raise ValueError("FFmpeg targets have different source versions")
-        updated["version"] = source_versions.pop() + "-" + release["tag_name"][10:20]
-    else:
-        entries = get_json("https://mkvtoolnix.download/windows/releases/")
-        versions = [
-            Version(entry["name"].rstrip("/"))
-            for entry in entries
-            if re.fullmatch(r"\d+\.\d+(?:\.\d+)?/", entry["name"])
-        ]
-        version = str(max(versions))
-        if Version(version) <= Version(data["version"]):
-            return data
-        for target, config in updated["targets"].items():
-            url = (
-                f"https://mkvtoolnix.download/appimage/MKVToolNix_GUI-{version}-x86_64.AppImage"
-                if target.startswith("linux")
-                else f"https://mkvtoolnix.download/windows/releases/{version}/mkvtoolnix-64-bit-{version}.zip"
-            )
-            config["asset"].update(url=url, sha256=remote_hash(url))
-        updated["version"] = version
+class UpdateContext:
+    def __init__(self, data: dict[str, Any]) -> None:
+        self.original = copy.deepcopy(data)
+        self.data = copy.deepcopy(data)
+
+    def source_tags(self) -> dict[str, Any]:
+        self.data["source"] = latest_tag(self.data["source"])
+        if "dependencies" in self.data:
+            self.data["dependencies"] = {name: latest_tag(pin) for name, pin in self.data["dependencies"].items()}
+        if self.pins_changed:
+            self.data["version"] = self.data["source"]["tag"].removeprefix("v")
+        return self.data
+
+    @property
+    def pins_changed(self) -> bool:
+        return any(self.data.get(key) != self.original.get(key) for key in ("source", "dependencies"))
+
+    def get_json(self, url: str) -> Any:
+        return get_json(url)
+
+    def remote_hash(self, url: str) -> str:
+        return remote_hash(url)
+
+
+def source_update(ctx: UpdateContext) -> dict[str, Any]:
+    return ctx.source_tags()
+
+
+def update_definition(data: dict[str, Any], *, root: Path) -> dict[str, Any]:
+    recipe = load_recipe(root, data["name"])
+    updated = recipe.discover_update(UpdateContext(data))
+    if updated["name"] != data["name"]:
+        raise ValueError("Update discovery cannot change package identity")
+    updated["version_code"] = data["version_code"]
     if updated != data:
-        updated["version_code"] = data["version_code"] + 1
-    Package.model_validate(updated)
+        updated["version_code"] += 1
+    package = Package.model_validate(updated)
+    for target in package.targets:
+        recipe_checks(recipe, package, target)
     return updated
 
 
@@ -131,7 +110,7 @@ def discover(root: Path, name: str | None, apply: bool) -> None:
         path = root / "packages" / package.name / "package.toml"
         text = path.read_text()
         original = tomllib.loads(text)
-        updated = update_definition(original)
+        updated = update_definition(original, root=root)
         if updated != original:
             changes.append({"package": package.name, "before": original["version"], "after": updated["version"]})
             if apply:
