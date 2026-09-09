@@ -127,7 +127,7 @@ and the catalog. Windows metadata does not emit this runtime table.
 | --- | --- | --- |
 | `url` | String | Required HTTPS download URL. |
 | `sha256` | String | Required; exactly 64 lowercase hexadecimal characters. |
-| `format` | String | Required; `zip`, `tar.xz`, `7z`, or `appimage`. |
+| `format` | String | Required; `zip`, `tar.xz`, `7z`, `appimage`, or `binary`. |
 
 Each target has one asset. Its recipe selects files, preserves licenses, and
 stages runtime resources. AppImages need recipe-specific handling; declaring

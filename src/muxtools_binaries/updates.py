@@ -72,6 +72,11 @@ class UpdateContext:
     def get_json(self, url: str) -> Any:
         return get_json(url)
 
+    def get_text(self, url: str) -> str:
+        response = httpx2.get(url, follow_redirects=True, timeout=60)
+        response.raise_for_status()
+        return response.text
+
     def remote_hash(self, url: str) -> str:
         return remote_hash(url)
 

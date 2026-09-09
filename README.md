@@ -1,7 +1,7 @@
 # muxtools-binaries
 
-Portable command-line tools for Linux and Windows x86-64: fdkaac, FLAC,
-Opus tools, WavPack, FFmpeg/FFprobe, MKVToolNix, and multilib x265.
+Portable command-line tools for Linux and Windows x86-64.<br>
+Available packages are listed on the documention linked below. (Or just check the packages folder)
 
 [Documentation](https://vodes.github.io/muxtools-binaries/) ·
 [Downloads](https://github.com/Vodes/muxtools-binaries/releases) ·

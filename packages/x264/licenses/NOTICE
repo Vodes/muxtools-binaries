@@ -1,0 +1,17 @@
+These executables are imported unchanged from VideoLAN:
+https://artifacts.videolan.org/x264/
+
+x264 is licensed under GPL version 2 or later.
+Source: https://code.videolan.org/videolan/x264
+The initial package uses revision r3222-b35605a.
+COPYING was retrieved from:
+https://code.videolan.org/videolan/x264/-/raw/b35605a/COPYING
+
+The binaries also report statically included libswscale/libavformat (FFmpeg,
+LGPL version 2.1 or later) and L-SMASH 2.16.1 (ISC).
+Their license texts are included in the ffmpeg and lsmash directories.
+Sources and license origins:
+https://github.com/FFmpeg/FFmpeg
+https://raw.githubusercontent.com/FFmpeg/FFmpeg/n8.0/COPYING.LGPLv2.1
+https://github.com/l-smash/l-smash
+https://raw.githubusercontent.com/l-smash/l-smash/master/LICENSE

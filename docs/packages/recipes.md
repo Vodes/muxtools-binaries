@@ -129,6 +129,7 @@ Return the proposed manifest dictionary from `discover_update(ctx)`.
 | `source_tags()` | Select newer stable numeric tags for the main source and dependencies; update the package version when pins change. |
 | `pins_changed` | Compare source and dependency pins with the original manifest. |
 | `get_json(url)` | Fetch JSON over HTTP. |
+| `get_text(url)` | Fetch text over HTTP, such as an upstream HTML artifact listing. |
 | `remote_hash(url)` | Download a remote file and calculate its SHA-256. |
 
 Re-export `source_update` as `discover_update` when source-tag discovery is enough.

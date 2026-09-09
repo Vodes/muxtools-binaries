@@ -1,0 +1,22 @@
+schema_version = 1
+name = "x264"
+# Upstream description: https://www.videolan.org/developers/x264.html
+description = "H.264/MPEG-4 AVC encoder"
+version = "r3222-b35605a"
+version_code = 1
+type = "upstream-binary"
+provider = "VideoLAN"
+
+# Statically linked ELF: no shared libraries or system glibc required.
+[targets.linux-x86_64.asset]
+url = "https://artifacts.videolan.org/x264/release-debian-amd64/x264-r3222-b35605a"
+sha256 = "f06cbf9731cced76b7a1be52e47376a8b914741080994f386d91d9961a2ecb52"
+format = "binary"
+
+[targets.windows-x86_64.asset]
+url = "https://artifacts.videolan.org/x264/release-win64/x264-r3222-b35605a.exe"
+sha256 = "ca622e7a1ed7efd0953d8dbb9eb08672ca45d80ce962d63d637b79462a7de3ed"
+format = "binary"
+
+[executables]
+x264 = ["--version"]

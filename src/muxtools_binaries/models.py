@@ -43,7 +43,7 @@ class Source(Model):
 class Asset(Model):
     url: str = Field(pattern=r"^https://")
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    format: Literal["zip", "tar.xz", "7z", "appimage"]
+    format: Literal["zip", "tar.xz", "7z", "appimage", "binary"]
 
 
 class Runtime(Model):

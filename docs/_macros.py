@@ -9,14 +9,19 @@ def package_table(root: Path) -> str:
     manifests = sorted((root / "packages").glob("*/package.toml"))
     if not manifests:
         raise ValueError("No package manifests found")
-    rows = ["<table>", "<thead><tr><th>Package</th><th>Description</th><th>Executables</th></tr></thead>", "<tbody>"]
+    rows = [
+        "<table>",
+        "<thead><tr><th>Package</th><th>Type</th><th>Description</th><th>Executables</th></tr></thead>",
+        "<tbody>",
+    ]
     for path in manifests:
         with path.open("rb") as manifest:
             package = tomllib.load(manifest)
         name = escape(package["name"])
+        kind = escape(package["type"])
         description = escape(" ".join(package.get("description", "").split()))
         executables = ", ".join(f"<code>{escape(name)}</code>" for name in package["executables"])
-        rows.append(f"<tr><td>{name}</td><td>{description}</td><td>{executables}</td></tr>")
+        rows.append(f"<tr><td>{name}</td><td>{kind}</td><td>{description}</td><td>{executables}</td></tr>")
     return "\n".join([*rows, "</tbody>", "</table>"])
 
 
