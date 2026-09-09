@@ -13,3 +13,7 @@ context/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+
+# Documentation output and cache
+site/
+.cache/

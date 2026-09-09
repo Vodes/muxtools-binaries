@@ -91,7 +91,7 @@ def _ignored_matrix_path(path: str) -> bool:
     name = lowered.rsplit("/", 1)[-1]
     return (
         lowered in {"readme", "readme.md", "readme.rst", "readme.txt"}
-        or lowered == ".editorconfig"
+        or lowered in {".editorconfig", "zensical.toml", ".github/workflows/docs.yml"}
         or lowered.startswith(("docs/", "context/", ".vscode/", ".idea/"))
         or name.endswith((".code-workspace", ".sublime-project", ".sublime-workspace"))
     )

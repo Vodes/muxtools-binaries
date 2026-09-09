@@ -1,0 +1,49 @@
+[project]
+site_name = "muxtools-binaries"
+site_description = "Build, test, and publish portable command-line tools for Linux and Windows."
+site_url = "https://vodes.github.io/muxtools-binaries/"
+repo_url = "https://github.com/Vodes/muxtools-binaries"
+repo_name = "Vodes/muxtools-binaries"
+edit_uri = "edit/main/docs/"
+nav = [
+    { "Home" = "index.md" },
+    { "Build a package" = "getting-started.md" },
+    { "Packages" = [
+        { "Add a package" = "packages/adding-a-package.md" },
+        { "Manifest reference" = "packages/manifest.md" },
+        { "Recipe reference" = "packages/recipes.md" },
+    ] },
+    { "Architecture" = [
+        { "Overview" = "architecture.md" },
+        { "Builder and toolchains" = "architecture/builder.md" },
+        { "Checks and tests" = "architecture/testing.md" },
+        { "Archives and catalog" = "architecture/artifacts.md" },
+        { "Releases and updates" = "architecture/releases.md" },
+    ] },
+    { "Edit the docs" = "contributing-docs.md" },
+]
+
+[project.theme]
+variant = "classic"
+language = "en"
+features = [
+    "content.code.copy",
+    "navigation.expand",
+    "navigation.footer",
+    "navigation.top",
+]
+
+[project.theme.palette]
+scheme = "slate"
+primary = "purple"
+accent = "indigo"
+
+[project.validation]
+invalid_links = true
+invalid_link_anchors = true
+
+[project.markdown_extensions.tables]
+
+[project.markdown_extensions.pymdownx.highlight]
+
+[project.markdown_extensions.pymdownx.superfences]

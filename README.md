@@ -1,103 +1,36 @@
 # muxtools-binaries
 
-Build and package portable tools for Linux and Windows x86-64.
+Portable command-line tools for Linux and Windows x86-64: fdkaac, FLAC,
+Opus tools, WavPack, FFmpeg/FFprobe, MKVToolNix, and multilib x265.
 
-Supported packages: fdkaac, FLAC, Opus tools, WavPack, FFmpeg/FFprobe, MKVToolNix, and multilib x265.
+[Documentation](https://vodes.github.io/muxtools-binaries/) ·
+[Downloads](https://github.com/Vodes/muxtools-binaries/releases) ·
+[Package setup](docs/packages/adding-a-package.md)
 
-Source builds use one manylinux_2_34-derived Linux image; Windows builds cross-compile through MinGW.
-Build tools, LLVM, and MinGW come from the image's repositories.
-The final image digest freezes their versions.
+Source builds use a shared Linux builder image. Windows builds use MinGW.
+Linux source builds require x86-64-v2 and glibc 2.34. x265 also includes
+AVX2, AVX512, and Zen 4 variants. Imported tools can have extra runtime requirements.
 
-- Source-built Linux executables target x86-64-v2 and glibc 2.34.
-- x265 also provides explicit AVX2, AVX512, and zn4 variants, each supporting 8/10/12-bit encoding.
-- Imported packages declare additional runtime requirements where necessary.
+## Development
 
-## Local development
-
-Install Docker and uv, then set up the project and run the checks:
+Install uv and Docker, then run:
 
 ```sh
 git submodule update --init --recursive
 uv sync --frozen
 uv run muxtools-build validate
 uv run pytest -q
-uv run mypy
-uv run tombi format --check
-uv run tombi lint --error-on-warnings
 ```
 
-Build the local image, then build and test a package:
+See the [build guide](docs/getting-started.md) for build commands and checks.
+Releases require a manual workflow run; normal CI only builds and tests packages.
+
+## Documentation preview
 
 ```sh
-docker build -t muxtools-builder:local -f builder/Dockerfile .
-uv run muxtools-build build flac --target linux-x86_64 --image muxtools-builder:local
-uv run muxtools-build test dist/flac-1.5.0-linux-x86_64.tar.zst
+uv sync --frozen --only-group docs
+uv run --frozen --only-group docs zensical serve
 ```
 
-Builds always run when requested, regardless of published versions.
-Publishing skips versions that are already published. To release a changed build of the same upstream source,
-use a new package version (for example `4.2.post1`) and increment `version_code`.
-Windows artifacts must be smoke-tested on Windows; CI supplies native runners.
-
-Audio smoke tests encode `tests/data/audio/wav_source.wav` with each runnable FLAC,
-fdkaac, Opus, and WavPack encoder variant. WavPack is tested in both default lossless
-mode and lossy mode (`-b128`, targeting 128 kb/s, without a correction file).
-PyAV decodes the output, and Zimtohrli compares
-each channel at 48 kHz. Tests reject empty or undecodable output, changed channel
-counts, duration differences over 100 ms, silence, and per-channel MOS below 4.5.
-This is a coarse corruption check, not a codec quality benchmark. Scores are printed
-in the test log. When running outside the checkout, pass `--root /path/to/checkout`
-before the `test` command so the fixture can be found.
-
-### Working directories
-
-Each `packages/<name>/` directory owns its TOML build settings, recipe hooks for building/checks/updates,
-and optional `tests/`. Shared code supplies the toolchains, check runners, and release machinery.
-New archives carry their recipe's check definitions in metadata schema 2, so testing them does not
-depend on the current recipe. Older schema 1 archives remain readable for catalog recovery;
-rebuild them for native testing with the new runner.
-
-These directories stay gitignored:
-
-- `build/`: builds, downloads, and source checkouts.
-- `dist/`: final archives.
-- `context/`: local reference material.
-
-### Formatting and commands
-
-Use `uv run tombi format` to format repository TOML files.
-Update PRs format and lint their manifest before opening;
-packaging formats and lints `.metadata.toml` offline before archiving it.
-
-Use `uv run muxtools-build --help` for matrix generation, repackaging, update discovery, and publishing commands.
-
-See [the architecture and artifact contracts](docs/architecture.md) for recipe authoring,
-runtime requirements, and catalog recovery.
-
-## Releases
-
-PRs and pushes to `main` build test artifacts only. No automatic upstream update publishes binaries.
-Automatic builds select packages changed under `packages/<name>/`, comparing PRs with their base
-and pushes with the previous branch commit. Documentation and editor-only changes do not select builds.
-Adding a package or changing its local tests selects that package; build and update workflows discover
-packages automatically.
-Shared changes (including `src/`, `tests/`, `builder/`, workflows, and dependency configuration)
-rebuild every package. If the previous push commit is unavailable, every package is built.
-Manual runs build all packages unless the `packages` input selects specific names.
-
-Before the first release:
-
-1. Run **Qualify builder**, enabling its publish checkbox to publish the tested image.
-2. Adopt its GHCR digest in `builder/lock.toml`.
-3. Manually run **Build and test** on `main` with **publish** checked.
-
-For subsequent releases, repeat step 3 using the adopted builder.
-Publication defaults to off in both workflows.
-
-### Published artifacts
-
-- Archives use `.tar.zst` on both platforms and contain `.metadata.toml`.
-- File modification times are preserved, including dates from imported archives.
-- The published `versions.json` lives on the `catalog-v1` release.
-
-This is a clean break from the old ZIP/JSON contract; historical releases remain available.
+Open <http://localhost:8000>. See [the docs guide](docs/contributing-docs.md)
+for site configuration and GitHub Pages setup.

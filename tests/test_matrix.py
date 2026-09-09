@@ -82,6 +82,9 @@ def test_docs_only_and_empty_diff_have_empty_matrix(tmp_path):
     assert _names(root, base) == set()
 
     (root / "README.md").write_text("read me\n")
+    (root / "zensical.toml").write_text('[project]\nsite_name = "Docs"\n')
+    (root / ".github/workflows").mkdir(parents=True)
+    (root / ".github/workflows/docs.yml").write_text("name: Documentation\n")
     (root / "context").mkdir()
     (root / "context" / "notes.md").write_text("notes\n")
     (root / ".vscode").mkdir()
