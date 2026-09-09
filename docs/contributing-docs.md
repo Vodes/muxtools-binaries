@@ -28,6 +28,10 @@ instead of `--only-group docs`.
 
 ## Add or change a page
 
+The available packages table is generated from `packages/*/package.toml` by
+Zensical's macros plugin. Edit the manifests to change its names, descriptions,
+or executable lists. Both the local preview and CI rebuild it automatically.
+
 1. Edit the Markdown file under `docs/`.
 2. If you add a page, add it to `project.nav` in `zensical.toml`.
 3. Link to other pages with relative `.md` paths. Zensical rewrites them for the site.

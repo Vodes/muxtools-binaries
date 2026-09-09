@@ -5,6 +5,7 @@ site_url = "https://vodes.github.io/muxtools-binaries/"
 repo_url = "https://github.com/Vodes/muxtools-binaries"
 repo_name = "Vodes/muxtools-binaries"
 edit_uri = "edit/main/docs/"
+watch = ["packages"]
 nav = [
     { "Home" = "index.md" },
     { "Build a package" = "getting-started.md" },
@@ -41,6 +42,12 @@ accent = "indigo"
 [project.validation]
 invalid_links = true
 invalid_link_anchors = true
+
+[project.plugins.macros]
+module_name = "docs/_macros"
+render_by_default = false
+on_error_fail = true
+on_undefined = "strict"
 
 [project.markdown_extensions.tables]
 

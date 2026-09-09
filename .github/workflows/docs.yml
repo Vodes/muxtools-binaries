@@ -3,6 +3,7 @@ on:
   pull_request:
     paths:
       - 'docs/**'
+      - 'packages/*/package.toml'
       - 'zensical.toml'
       - 'pyproject.toml'
       - 'uv.lock'
@@ -11,6 +12,7 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'packages/*/package.toml'
       - 'zensical.toml'
       - 'pyproject.toml'
       - 'uv.lock'
