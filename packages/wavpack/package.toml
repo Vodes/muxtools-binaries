@@ -1,5 +1,7 @@
 schema_version = 1
 name = "wavpack"
+# Upstream description: https://www.wavpack.com/
+description = "Hybrid Lossless Audio Compression"
 version = "5.9.0"
 version_code = 1
 type = "source-build"

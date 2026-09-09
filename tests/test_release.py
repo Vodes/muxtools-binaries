@@ -28,7 +28,8 @@ def test_manual_release_gate():
 
 
 @pytest.fixture
-def releases(package, tmp_path, monkeypatch, recipe_root):
+def releases(package, tmp_path, monkeypatch, recipe_root, request):
+    package.description = getattr(request, "param", "")
     monkeypatch.setenv("GITHUB_SHA", "fixture-revision")
     monkeypatch.setattr("muxtools_binaries.release.load_packages", lambda _: {package.name: package})
     monkeypatch.setattr("muxtools_binaries.release.builder_image", lambda *a, **kw: "fixture-image")
@@ -58,6 +59,8 @@ def releases(package, tmp_path, monkeypatch, recipe_root):
             ),
         )
         data["build"].update(options=package.build, target_options=config.build)
+        if package.description:
+            data["description"] = package.description
         archive = pack(stage, data, artifacts)
         archive.with_name(archive.name + ".report.json").write_text(
             json.dumps(
@@ -110,6 +113,7 @@ def test_failed_upload_does_not_publish_catalog(releases, package, monkeypatch):
     assert all(call.args[0] != "catalog-v1" for call in api.ensure_release.call_args_list)
 
 
+@pytest.mark.parametrize("releases", ["", "A tool for café audio.\nIncludes an inspector."], indirect=True)
 def test_catalog_provides_and_nested_versions(releases, package, monkeypatch):
     monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
@@ -134,6 +138,10 @@ def test_catalog_provides_and_nested_versions(releases, package, monkeypatch):
     monkeypatch.setattr("muxtools_binaries.release.GitHub", lambda _: api)
     publish(releases, releases, "example/repo", True)
     entry = published["packages"][package.name]
+    assert published["schema_version"] == 1
+    assert entry.get("description", "") == package.description
+    assert entry["versions"][package.version].get("description", "") == package.description
+    assert ("description" in entry) == bool(package.description)
     assert entry["provides"] == sorted(package.executables)
     assert entry["versions"]["previous"] == previous
     assert entry["versions"][package.version]["version_code"] == package.version_code
@@ -153,6 +161,7 @@ def test_existing_version_keeps_published_catalog_without_comparing_build(releas
     assert api.mock_calls == []
 
 
+@pytest.mark.parametrize("releases", ["", "Original upstream description."], indirect=True)
 def test_published_version_recovers_catalog_using_original_archives(releases, package):
     groups = collect(releases, releases)
     assets = []
@@ -172,6 +181,7 @@ def test_published_version_recovers_catalog_using_original_archives(releases, pa
         }
         archive.write_bytes(b"different rebuilt archive")
         data["version_code"] = 99
+        data["description"] = "Description from the rebuilt archive."
         data["binaries"] = {"different": {"baseline": "different"}}
     api = Mock()
     api.ensure_release.return_value = {"id": 10, "draft": False, "tag_name": f"{package.name}-{package.version}"}
@@ -179,9 +189,40 @@ def test_published_version_recovers_catalog_using_original_archives(releases, pa
     api.asset_bytes.side_effect = lambda asset: contents[asset["id"]]
     entry = _publish_package(api, "example/repo", package.name, groups[package.name])
     assert entry["version_code"] == package.version_code
+    assert entry.get("description", "") == package.description
     assert entry["targets"] == original
     api.upload.assert_not_called()
     assert all(call.args[0] == "GET" for call in api.request.call_args_list)
+
+
+def test_release_rejects_description_from_a_different_manifest(releases, package):
+    package.description = "Changed after building."
+    with pytest.raises(ValueError, match="Artifact description differs"):
+        collect(releases, releases)
+
+
+@pytest.mark.parametrize("latest_description", [None, "Description of the newest release."])
+def test_recovering_older_version_keeps_latest_description(releases, package, monkeypatch, latest_description):
+    groups = collect(releases, releases)
+    newer = {"version_code": package.version_code + 1, "targets": {}}
+    if latest_description is not None:
+        newer["description"] = latest_description
+    catalog = {
+        "schema_version": 1,
+        "packages": {package.name: {"description": "Stale description.", "provides": [], "versions": {"newer": newer}}},
+    }
+    api = Mock()
+    api.release.return_value = {"id": 1, "draft": False}
+    monkeypatch.setattr(
+        "muxtools_binaries.release._publish_package",
+        lambda *args: {
+            "version_code": package.version_code,
+            "description": "Description from the recovered older release.",
+            "targets": {},
+        },
+    )
+    _update_catalog(api, "example/repo", catalog, groups)
+    assert catalog["packages"][package.name].get("description") == latest_description
 
 
 def test_historical_release_is_skipped_without_catalog_metadata(releases, package):

@@ -1,5 +1,7 @@
 schema_version = 1
 name = "mkvtoolnix"
+# Upstream description: https://mkvtoolnix.download/
+description = "Matroska tools for Linux/Unix and Windows"
 version = "101.0"
 version_code = 2
 type = "upstream-binary"

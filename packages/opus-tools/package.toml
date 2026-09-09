@@ -1,5 +1,7 @@
 schema_version = 1
 name = "opus-tools"
+# Upstream description: https://github.com/xiph/opus-tools
+description = "A set of tools to encode, inspect, and decode audio in the Opus format."
 version = "0.2-libopus-1.6.1"
 version_code = 2
 type = "source-build"

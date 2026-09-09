@@ -75,6 +75,7 @@ class Target(Model):
 class Package(Model):
     schema_version: Literal[1] = 1
     name: str = Field(pattern=r"^[a-z][a-z0-9-]*$")
+    description: str = ""
     version: str = Field(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9.+_-]*$")
     version_code: int = Field(ge=1, strict=True)
     type: Literal["source-build", "external-build", "upstream-binary"]

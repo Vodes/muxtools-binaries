@@ -18,6 +18,7 @@ schema 1; [archive metadata](../architecture/artifacts.md#metadata) uses schema 
 | --- | --- | --- | --- |
 | `schema_version` | Integer | `1` | Only manifest schema 1 is accepted. Write it explicitly. |
 | `name` | String | Required | Lowercase letter, followed by lowercase letters, digits, or hyphens. Must match the directory name. |
+| `description` | String | `""` | Free-form text for package-manager search results and package details. |
 | `version` | String | Required | Release identity. Starts with a letter or digit; remaining characters can also include `.`, `+`, `_`, and `-`. |
 | `version_code` | Integer | Required | At least 1. Increase for each new release definition; never reset for a new upstream version. Booleans and strings are rejected. |
 | `type` | String | Required | `source-build`, `external-build`, or `upstream-binary`. |
@@ -28,6 +29,9 @@ schema 1; [archive metadata](../architecture/artifacts.md#metadata) uses schema 
 | `executables` | Table | Required, nonempty | Logical executable names and smoke arguments. |
 | `build` | Table | Empty | Common recipe options, validated by `Options`. |
 | `update` | Table | Empty | Update settings, validated by `UpdateOptions`. |
+
+Use upstream's short description when it fits the package. The text is carried
+into archive metadata and the catalog for package managers to display.
 
 `type` records provenance and applies validation rules. It does not choose a
 recipe or build system. Both import types require a target asset and a

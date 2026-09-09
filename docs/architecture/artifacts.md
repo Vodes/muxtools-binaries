@@ -34,6 +34,7 @@ remain on schema 1.
 | --- | --- |
 | `schema_version` | `2` for newly built archives. |
 | `name`, `version`, `version_code`, `target` | Package identity and explicit target. |
+| `description` | Optional user-facing text from the package manifest. |
 | `binaries` | Logical executable names mapped to CPU variants and archive paths. |
 | `smoke` | Smoke arguments from the manifest. |
 | `checks` | Declarative smoke, functional, and required-file checks. |
@@ -77,11 +78,13 @@ shows its structure; the URL, checksum, and size are illustrative:
   "schema_version": 1,
   "packages": {
     "x265": {
+      "description": "HEVC/H.265 Encoder",
       "provides": ["x265"],
       "versions": {
         "4.2": {
           "version": "4.2",
           "version_code": 1,
+          "description": "HEVC/H.265 Encoder",
           "tag": "x265-4.2",
           "targets": {
             "linux-x86_64": {
@@ -107,6 +110,12 @@ Each package's `provides` list contains the logical executable names from its
 newest published version, selected by the highest `version_code`. It excludes
 platform extensions and CPU suffixes. Per-target `binaries` mappings remain
 authoritative for exact filenames and historical versions.
+
+The optional package-level `description` comes from the same newest published
+version. Each version retains its own description for catalog recovery. Empty
+descriptions are omitted; consumers should also accept a missing field in older
+archives and catalogs. Schema versions are unchanged. Description edits take
+effect with the next new release; existing published versions remain unchanged.
 
 Consumers should select versions by `version_code`, then use the target's URL,
 checksum, runtime requirements, and executable mapping. Package versions can

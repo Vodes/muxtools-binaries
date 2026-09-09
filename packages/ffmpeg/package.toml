@@ -1,5 +1,7 @@
 schema_version = 1
 name = "ffmpeg"
+# Upstream description: https://ffmpeg.org/
+description = "A complete, cross-platform solution to record, convert and stream audio and video."
 version = "9.0.1-27-g9b0578816c-2026-09-07"
 version_code = 2
 type = "external-build"

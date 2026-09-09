@@ -1,5 +1,7 @@
 schema_version = 1
 name = "x265"
+# Upstream description: https://www.x265.org/
+description = "HEVC/H.265 Encoder"
 version = "4.2.post1"
 version_code = 2
 type = "source-build"

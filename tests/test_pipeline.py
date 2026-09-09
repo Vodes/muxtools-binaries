@@ -8,9 +8,11 @@ from unittest.mock import Mock
 
 import pytest
 
-from muxtools_binaries.artifacts import pack, read_metadata
+from muxtools_binaries.artifacts import metadata, pack, read_metadata, validate_layout
 from muxtools_binaries.build import BuildContext
+from muxtools_binaries.checks import default_checks
 from muxtools_binaries.io import extract, sha256
+from muxtools_binaries.models import Package
 from muxtools_binaries.testing import cpu_state, supports
 
 
@@ -53,6 +55,31 @@ def test_archive_roundtrip(tmp_path):
     assert read_metadata(tmp_path / "unpacked") == data
     assert (tmp_path / "unpacked/example").read_bytes() == binary.read_bytes()
     assert (tmp_path / "unpacked/example").stat().st_mtime == binary.stat().st_mtime
+
+
+@pytest.mark.parametrize("description", [None, "", 'Encode café audio.\nSupports "quoted" text.'])
+def test_optional_description_roundtrip(package, tmp_path, monkeypatch, description):
+    definition = package.model_dump(exclude={"description"})
+    if description is not None:
+        definition["description"] = description
+    package = Package.model_validate(definition)
+    assert package.schema_version == 1
+    assert package.description == (description or "")
+    with monkeypatch.context() as patch:
+        patch.setattr("muxtools_binaries.artifacts.run", Mock(return_value=SimpleNamespace(stdout="compiler 1.0")))
+        data = metadata(package, "linux-x86_64", "revision", "image", "test", default_checks(package))
+    assert data["schema_version"] == 2
+    assert ("description" in data) == bool(description)
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    binary = stage / "example"
+    binary.write_bytes(b"fixture")
+    binary.chmod(0o755)
+    archive = pack(stage, data, tmp_path / "dist")
+    extract(archive, tmp_path / "unpacked", "tar.zst")
+    assert read_metadata(tmp_path / "unpacked").get("description", "") == (description or "")
+    with pytest.raises(ValueError, match="Invalid artifact description"):
+        validate_layout(stage, dict(data, description=123))
 
 
 @pytest.mark.parametrize("kind", ["zip", "tar", "7z"])

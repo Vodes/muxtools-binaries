@@ -29,6 +29,8 @@ def metadata(
         provenance=dict(type=package.type, channel=channel),
         builder=dict(revision=revision, image=image),
     )
+    if package.description:
+        data["description"] = package.description
     if package.provider:
         data["provenance"]["provider"] = package.provider
     if package.source:
@@ -71,6 +73,8 @@ def validate_layout(stage: Path, data: dict[str, Any]) -> None:
         raise ValueError("Invalid artifact version code or target")
     if data.get("schema_version") not in (1, 2) or data.get("provenance", {}).get("channel") not in ("test", "release"):
         raise ValueError("Unsupported metadata schema or channel")
+    if not isinstance(data.get("description", ""), str):
+        raise ValueError("Invalid artifact description")
     seen = set()
     for path in stage.rglob("*"):
         name = safe_path(path.relative_to(stage).as_posix())

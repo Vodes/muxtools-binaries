@@ -34,6 +34,7 @@ source pin, and executable names for your tool.
 ```toml
 schema_version = 1
 name = "wavpack"
+description = "Hybrid Lossless Audio Compression"
 version = "5.9.0"
 version_code = 1
 type = "source-build"

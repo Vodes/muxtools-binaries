@@ -1,5 +1,7 @@
 schema_version = 1
 name = "fdkaac"
+# Upstream description: https://github.com/nu774/fdkaac
+description = "command line encoder frontend for libfdk-aac"
 version = "1.0.9-libfdk-2.0.3"
 version_code = 2
 type = "source-build"

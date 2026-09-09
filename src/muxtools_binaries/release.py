@@ -109,6 +109,8 @@ class GitHub:
 
 
 def _validate_package(data: dict[str, Any], package: Package) -> None:
+    if data.get("description", "") != package.description:
+        raise ValueError("Artifact description differs from package definition")
     if data["provenance"]["type"] != package.type:
         raise ValueError("Artifact provenance differs from package definition")
     if package.source and data.get("source") != package.source.model_dump():
@@ -231,8 +233,12 @@ def _published_entry(github: GitHub, release: dict[str, Any], name: str, version
                     "tag": release["tag_name"],
                     "targets": {},
                 }
+                if data.get("description"):
+                    entry["description"] = data["description"]
             if data["version_code"] != entry["version_code"] or data["target"] in entry["targets"]:
                 raise ValueError("Inconsistent published package archives")
+            if data.get("description", "") != entry.get("description", ""):
+                raise ValueError("Inconsistent published package descriptions")
             entry["targets"][data["target"]] = {
                 "url": asset["browser_download_url"],
                 "sha256": sha256(archive),
@@ -257,6 +263,8 @@ def _publish_package(
         print(f"Skipping published version {tag}; recovering its catalog entry from published archives", flush=True)
         return _published_entry(github, release, name, sample["version"])
     entry = {"version": sample["version"], "version_code": sample["version_code"], "tag": tag, "targets": {}}
+    if sample.get("description"):
+        entry["description"] = sample["description"]
     for target, (archive, data, digest) in targets.items():
         checksum = archive.with_name(archive.name + ".sha256")
         checksum.write_text(f"{digest}  {archive.name}\n")
@@ -295,6 +303,10 @@ def _update_catalog(github: GitHub, repository: str, catalog: dict[str, Any], gr
             continue
         versions[version] = entry
         latest = max(versions.values(), key=lambda item: item["version_code"])
+        if latest.get("description"):
+            package_entry["description"] = latest["description"]
+        else:
+            package_entry.pop("description", None)
         package_entry["provides"] = sorted(
             {binary for target in latest["targets"].values() for binary in target["binaries"]}
         )
