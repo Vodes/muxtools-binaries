@@ -12,8 +12,9 @@ from cpuinfo import get_cpu_info
 
 from .artifacts import read_metadata, write_report
 from .audio_testing import exercise_audio
-from .checks import AudioCheck, CheckSuite, CommandCheck, archive_checks
+from .checks import AudioCheck, CheckSuite, CommandCheck
 from .io import Command, extract, run
+from .recipes import checks_for_archive
 
 
 def supports(tier: str, features: set[str], xcr0: int) -> bool:
@@ -199,26 +200,27 @@ def run_smoke(command: Command, check: CommandCheck, *, cwd: Path | None = None)
 def test_archive(
     archive: Path,
     *,
+    root: Path = Path("."),
     smoke: bool = True,
     report: Path | None = None,
     audio_source: Path = Path("tests/data/audio/wav_source.wav"),
 ) -> list[str]:
     with tempfile.TemporaryDirectory(prefix="muxtools test ") as temporary:
-        root = Path(temporary)
-        stage = root / "package with spaces"
+        work = Path(temporary)
+        stage = work / "package with spaces"
         extract(archive, stage, "tar.zst")
         data = read_metadata(stage)
-        suite = archive_checks(data) if data["schema_version"] == 2 else None
+        suite = checks_for_archive(data, root) if data["schema_version"] != 1 else None
         structural(stage, data, suite)
         checks = ["structure"]
         if smoke:
             target_os = "windows" if os.name == "nt" else "linux"
             if not data["target"].startswith(target_os) or platform.machine().lower() not in ("amd64", "x86_64"):
                 raise ValueError("Smoke tests require the native target runner")
-            suite = suite or archive_checks(data)
+            suite = suite or checks_for_archive(data, root)
             features, xcr0 = cpu_state()
             tested = {"baseline"}
-            cwd = root / "unrelated directory"
+            cwd = work / "unrelated directory"
             cwd.mkdir()
             for executable, variants in data["binaries"].items():
                 for tier, filename in variants.items():

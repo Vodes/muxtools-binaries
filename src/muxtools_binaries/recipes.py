@@ -6,8 +6,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any
 
-from .checks import CheckSuite
-from .models import Model, Package
+from .checks import CheckSuite, archive_checks
+from .models import Model, Package, load_packages
 
 
 def load_recipe(root: Path, name: str) -> ModuleType:
@@ -46,3 +46,19 @@ def recipe_checks(recipe: ModuleType, package: Package, target: str) -> CheckSui
     if {name: check.args for name, check in suite.smoke.items()} != package.executables:
         raise ValueError(f"Recipe smoke arguments differ from {package.name}'s manifest")
     return suite
+
+
+def checks_for_archive(data: dict[str, Any], root: Path) -> CheckSuite:
+    if data["schema_version"] != 3:
+        return archive_checks(data)
+    package = load_packages(root, [data["name"]])[data["name"]]
+    target = data["target"]
+    if (
+        (data["version"], data["version_code"]) != (package.version, package.version_code)
+        or target not in package.targets
+        or data["binaries"] != package.binaries(target)
+        or data.get("build", {}).get("options", {}) != package.build
+        or data.get("build", {}).get("target_options", {}) != package.targets[target].build
+    ):
+        raise ValueError("Archive differs from the package definition; use the checkout recorded in builder.revision")
+    return recipe_checks(load_recipe(root, package.name), package, target)

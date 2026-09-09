@@ -140,7 +140,7 @@ def test_catalog_provides_and_nested_versions(releases, package, monkeypatch):
     entry = published["packages"][package.name]
     assert published["schema_version"] == 1
     assert entry.get("description", "") == package.description
-    assert entry["versions"][package.version].get("description", "") == package.description
+    assert "description" not in entry["versions"][package.version]
     assert ("description" in entry) == bool(package.description)
     assert entry["provides"] == sorted(package.executables)
     assert entry["versions"]["previous"] == previous
@@ -222,7 +222,7 @@ def test_recovering_older_version_keeps_latest_description(releases, package, mo
         },
     )
     _update_catalog(api, "example/repo", catalog, groups)
-    assert catalog["packages"][package.name].get("description") == latest_description
+    assert catalog["packages"][package.name].get("description") == (latest_description or "Stale description.")
 
 
 def test_historical_release_is_skipped_without_catalog_metadata(releases, package):

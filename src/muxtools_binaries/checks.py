@@ -1,4 +1,4 @@
-"""Declarative archive checks; executing them never imports a recipe."""
+"""Recipe check definitions and support for legacy embedded archive checks."""
 
 import re
 from string import Formatter
@@ -66,7 +66,7 @@ def default_checks(package: Package, target: str = "") -> CheckSuite:
 
 def archive_checks(data: dict[str, Any]) -> CheckSuite:
     if data.get("schema_version") != 2:
-        raise ValueError("Native tests require archive metadata schema 2; rebuild the archive to include recipe checks")
+        raise ValueError("This archive has no embedded checks; rebuild it and test with the matching repository checkout")
     suite = CheckSuite.model_validate(data.get("checks"))
     suite.validate_binaries(data["binaries"])
     if {name: check.args for name, check in suite.smoke.items()} != data["smoke"]:

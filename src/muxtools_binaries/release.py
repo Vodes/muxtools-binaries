@@ -127,11 +127,12 @@ def _validate_target(data: dict[str, Any], package: Package, root: Path) -> None
     from .checks import archive_checks
     from .recipes import load_recipe, recipe_checks
 
-    actual_checks = archive_checks(data)
-    if actual_checks != recipe_checks(load_recipe(root, package.name), package, data["target"]):
-        raise ValueError("Artifact checks differ from package recipe")
+    if data["schema_version"] != 3:
+        actual_checks = archive_checks(data)
+        if actual_checks != recipe_checks(load_recipe(root, package.name), package, data["target"]):
+            raise ValueError("Artifact checks differ from package recipe")
     config = package.targets[data["target"]]
-    if data["smoke"] != package.executables:
+    if data["schema_version"] != 3 and data["smoke"] != package.executables:
         raise ValueError("Artifact smoke commands differ from package definition")
     if config.asset and data["provenance"].get("asset") != config.asset.model_dump():
         raise ValueError("Artifact import differs from package definition")
@@ -139,8 +140,8 @@ def _validate_target(data: dict[str, Any], package: Package, root: Path) -> None
     if data.get("runtime", {}) != expected_runtime:
         raise ValueError("Artifact runtime differs from package definition")
     if (
-        data.get("build", {}).get("options") != package.build
-        or data.get("build", {}).get("target_options") != config.build
+        data.get("build", {}).get("options", {}) != package.build
+        or data.get("build", {}).get("target_options", {}) != config.build
     ):
         raise ValueError("Artifact build options differ from package definition")
     if package.type == "source-build":
@@ -282,6 +283,14 @@ def _publish_package(
 
 
 def _update_catalog(github: GitHub, repository: str, catalog: dict[str, Any], groups: ReleaseArtifacts) -> None:
+    for package_entry in catalog["packages"].values():
+        versions = package_entry["versions"]
+        if versions:
+            latest = max(versions.values(), key=lambda item: item["version_code"])
+            if latest.get("description"):
+                package_entry["description"] = latest["description"]
+        for entry in versions.values():
+            entry.pop("description", None)
     for name, targets in groups.items():
         sample = next(iter(targets.values()))[1]
         version = sample["version"]
@@ -301,12 +310,14 @@ def _update_catalog(github: GitHub, repository: str, catalog: dict[str, Any], gr
             if not versions:
                 del catalog["packages"][name]
             continue
+        description = entry.pop("description", "")
         versions[version] = entry
         latest = max(versions.values(), key=lambda item: item["version_code"])
-        if latest.get("description"):
-            package_entry["description"] = latest["description"]
-        else:
-            package_entry.pop("description", None)
+        if latest is entry:
+            if description:
+                package_entry["description"] = description
+            else:
+                package_entry.pop("description", None)
         package_entry["provides"] = sorted(
             {binary for target in latest["targets"].values() for binary in target["binaries"]}
         )

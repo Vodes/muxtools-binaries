@@ -16,13 +16,13 @@ Declare wrappers and private executables in
 
 Linux jobs use Ubuntu 24.04; Windows jobs use Windows Server 2022.
 The runner extracts each archive into a path that contains spaces. It invokes
-every baseline executable and runs the stored functional checks.
+every baseline executable and runs the recipe's functional checks.
 
 Source-built Linux baselines also run in AlmaLinux 9 without the builder tools.
 
-Tests execute the [checks stored in the archive](artifacts.md#metadata).
-Release collection compares the stored checks and build options with the current
-recipe and manifest.
+Tests load checks from the repository's matching manifest and recipe. Use the
+checkout recorded in `builder.revision` when testing an older download.
+Release collection validates artifact provenance, build options, and native test reports.
 
 ## Audio and video checks
 

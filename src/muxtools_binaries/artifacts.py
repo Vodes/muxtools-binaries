@@ -8,24 +8,20 @@ from typing import Any
 import tomlkit
 import zstandard
 
-from .checks import CheckSuite, archive_checks
+from .checks import archive_checks
 from .io import run, sha256
 from .models import Package, safe_path
 
 
-def metadata(
-    package: Package, target: str, revision: str, image: str, channel: str, checks: CheckSuite
-) -> dict[str, Any]:
+def metadata(package: Package, target: str, revision: str, image: str, channel: str) -> dict[str, Any]:
     config = package.targets[target]
     data: dict[str, Any] = dict(
-        schema_version=2,
+        schema_version=3,
         name=package.name,
         version=package.version,
         version_code=package.version_code,
         target=target,
         binaries=package.binaries(target),
-        smoke=package.executables,
-        checks=checks.model_dump(),
         provenance=dict(type=package.type, channel=channel),
         builder=dict(revision=revision, image=image),
     )
@@ -56,7 +52,10 @@ def metadata(
             linker=linker,
             linker_version=run([linker, "--version"], capture=True).stdout.splitlines()[0],
         )
-    data.setdefault("build", {}).update(options=package.build, target_options=config.build)
+    if package.build:
+        data.setdefault("build", {})["options"] = package.build
+    if config.build:
+        data.setdefault("build", {})["target_options"] = config.build
     return data
 
 
@@ -71,7 +70,7 @@ def validate_layout(stage: Path, data: dict[str, Any]) -> None:
         raise ValueError("Invalid artifact identity")
     if type(data.get("version_code")) is not int or data["version_code"] < 1 or data.get("target") not in TARGETS:
         raise ValueError("Invalid artifact version code or target")
-    if data.get("schema_version") not in (1, 2) or data.get("provenance", {}).get("channel") not in ("test", "release"):
+    if data.get("schema_version") not in (1, 2, 3) or data.get("provenance", {}).get("channel") not in ("test", "release"):
         raise ValueError("Unsupported metadata schema or channel")
     if not isinstance(data.get("description", ""), str):
         raise ValueError("Invalid artifact description")
@@ -84,8 +83,8 @@ def validate_layout(stage: Path, data: dict[str, Any]) -> None:
     for executable, variants in data["binaries"].items():
         if not variants or not set(variants) <= set(TIERS):
             raise ValueError("Invalid binary tiers")
-        if "baseline" not in variants or executable not in data["smoke"]:
-            raise ValueError(f"Missing baseline or smoke command for {executable}")
+        if "baseline" not in variants:
+            raise ValueError(f"Missing baseline for {executable}")
         for name in variants.values():
             path = stage / safe_path(name)
             if not path.is_file():

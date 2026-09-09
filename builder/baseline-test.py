@@ -5,8 +5,8 @@ import tempfile
 from pathlib import Path
 
 from muxtools_binaries.artifacts import read_metadata
-from muxtools_binaries.checks import archive_checks
 from muxtools_binaries.io import extract
+from muxtools_binaries.recipes import checks_for_archive
 from muxtools_binaries.testing import run_smoke
 
 
@@ -18,7 +18,7 @@ def main() -> None:
             data = read_metadata(stage)
             if data["provenance"]["type"] != "source-build":
                 continue
-            suite = archive_checks(data)
+            suite = checks_for_archive(data, Path(__file__).resolve().parents[1])
             for name, variants in data["binaries"].items():
                 run_smoke(
                     [

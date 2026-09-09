@@ -10,7 +10,6 @@ import pytest
 
 from muxtools_binaries.artifacts import metadata, pack, read_metadata, validate_layout
 from muxtools_binaries.build import BuildContext
-from muxtools_binaries.checks import default_checks
 from muxtools_binaries.io import extract, sha256
 from muxtools_binaries.models import Package
 from muxtools_binaries.testing import cpu_state, supports
@@ -67,8 +66,8 @@ def test_optional_description_roundtrip(package, tmp_path, monkeypatch, descript
     assert package.description == (description or "")
     with monkeypatch.context() as patch:
         patch.setattr("muxtools_binaries.artifacts.run", Mock(return_value=SimpleNamespace(stdout="compiler 1.0")))
-        data = metadata(package, "linux-x86_64", "revision", "image", "test", default_checks(package))
-    assert data["schema_version"] == 2
+        data = metadata(package, "linux-x86_64", "revision", "image", "test")
+    assert data["schema_version"] == 3
     assert ("description" in data) == bool(description)
     stage = tmp_path / "stage"
     stage.mkdir()

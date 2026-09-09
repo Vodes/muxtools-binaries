@@ -12,7 +12,7 @@ real build to confirm that upstream accepts them.
 ## Top-level fields
 
 Put scalar fields before the first TOML table header. Package manifests use
-schema 1; [archive metadata](../architecture/artifacts.md#metadata) uses schema 2.
+schema 1; [archive metadata](../architecture/artifacts.md#metadata) uses schema 3.
 
 | Field | Type | Required or default | Meaning and limits |
 | --- | --- | --- | --- |

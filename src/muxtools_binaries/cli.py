@@ -9,10 +9,9 @@ import httpx2
 
 from .artifacts import metadata, pack, read_metadata
 from .build import builder_image, produce
-from .checks import archive_checks
 from .io import run
 from .models import load_packages
-from .recipes import load_recipe, recipe_checks
+from .recipes import checks_for_archive, load_recipe, recipe_checks
 from .testing import structural, test_archive
 
 
@@ -147,7 +146,7 @@ def _build(root: Path, args: argparse.Namespace) -> None:
         _build_in_container(root, args, image, revision)
     else:
         stage, checks = produce(root, package, args.target, args.jobs)
-        data = metadata(package, args.target, revision, image, args.channel, checks)
+        data = metadata(package, args.target, revision, image, args.channel)
         structural(stage, data, checks)
         print(pack(stage, data, root / "dist"))
 
@@ -165,7 +164,7 @@ def main() -> int:
             print(f"Validated {len(packages)} packages")
         elif args.command == "package":
             data = read_metadata(args.stage)
-            suite = archive_checks(data) if data["schema_version"] == 2 else None
+            suite = checks_for_archive(data, root) if data["schema_version"] != 1 else None
             structural(args.stage, data, suite)
             print(pack(args.stage, data, args.output))
         elif args.command == "matrix":
@@ -176,6 +175,7 @@ def main() -> int:
             print(
                 test_archive(
                     args.archive.resolve(),
+                    root=root,
                     smoke=not args.structural_only,
                     report=args.report,
                     audio_source=root / "tests/data/audio/wav_source.wav",
