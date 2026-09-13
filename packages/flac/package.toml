@@ -2,8 +2,8 @@ schema_version = 1
 name = "flac"
 # Upstream description: https://github.com/xiph/flac
 description = "Free Lossless Audio Codec"
-version = "1.5.0"
-version_code = 1
+version = "1.5.0.post1"
+version_code = 2
 type = "source-build"
 
 [build]
