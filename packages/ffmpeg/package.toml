@@ -2,8 +2,8 @@ schema_version = 1
 name = "ffmpeg"
 # Upstream description: https://ffmpeg.org/
 description = "A complete, cross-platform solution to record, convert and stream audio and video."
-version = "9.0.1-27-g9b0578816c-2026-09-07"
-version_code = 2
+version = "9.0.1-27-g9b0578816c-2026-09-10"
+version_code = 3
 type = "external-build"
 provider = "Vodes/FFmpeg-Builds"
 
@@ -11,13 +11,13 @@ provider = "Vodes/FFmpeg-Builds"
 requirements = ["libgcc_s.so.1"]
 
 [targets.linux-x86_64.asset]
-url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-09-07-17-21/ffmpeg-n9.0.1-27-g9b0578816c-linux64-nonfree-9.0.tar.xz"
-sha256 = "25fdc8fe4558421aadf2672902b87a1a834fab13fadcb454dc814dc39febe02d"
+url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-09-10-11-08/ffmpeg-n9.0.1-27-g9b0578816c-linux64-nonfree-9.0.tar.xz"
+sha256 = "a07e6f81e1b94598286da27cb6107097eaf13a11918ebb51fba23e5ca2d1d928"
 format = "tar.xz"
 
 [targets.windows-x86_64.asset]
-url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-09-07-17-21/ffmpeg-n9.0.1-27-g9b0578816c-win64-nonfree-9.0.zip"
-sha256 = "aec058b2980a310120b8b288c677f31bf930c91ed2d804ee122df984309a5d4e"
+url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-09-10-11-08/ffmpeg-n9.0.1-27-g9b0578816c-win64-nonfree-9.0.zip"
+sha256 = "3207c95d26640588bcf3a675842402c530f042d4047b551f6735cb0ac636e43d"
 format = "zip"
 
 [executables]
