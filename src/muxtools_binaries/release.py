@@ -150,21 +150,30 @@ def _validate_target(data: dict[str, Any], package: Package, root: Path) -> None
                 raise ValueError(f"Artifact build setting differs from package definition: {key}")
 
 
-def _require_native_report(artifacts: Path, archive: Path, digest: str, package: Package, target: str) -> None:
-    reports = [json.loads(path.read_text()) for path in artifacts.rglob(archive.name + ".report.json")]
-    required = {"structure", "smoke", *[f"run:{name}:baseline" for name in package.executables]}
-    native_os = "nt" if target.startswith("windows") else "posix"
-    if not any(
-        report.get("sha256") == digest and required <= set(report.get("checks", [])) and report.get("os") == native_os
-        for report in reports
-    ):
-        raise ValueError(f"Missing native smoke report: {archive.name}")
+def _require_completion_report(root: Path, artifacts: Path, archive: Path, data: dict[str, Any]) -> None:
+    from .evidence import CompletionReport, validate_completion
+    from .recipes import checks_for_archive
+
+    reports = list(artifacts.rglob(archive.name + ".report.json"))
+    if len(reports) != 1:
+        raise ValueError(f"Missing or duplicate completion report: {archive.name}")
+    report = CompletionReport.model_validate_json(reports[0].read_text())
+    validate_completion(
+        report,
+        archive,
+        data,
+        checks_for_archive(data, root),
+        os.environ["GITHUB_SHA"],
+        root / "tests/data/audio/wav_source.wav",
+    )
 
 
 def collect(root: Path, artifacts: Path) -> ReleaseArtifacts:
     packages = load_packages(root)
     groups: ReleaseArtifacts = {}
     for archive in sorted(artifacts.rglob("*.tar.zst")):
+        if not archive.is_file():
+            continue
         digest = sha256(archive)
         with tempfile.TemporaryDirectory() as temporary:
             stage = Path(temporary)
@@ -179,7 +188,7 @@ def collect(root: Path, artifacts: Path) -> ReleaseArtifacts:
         ):
             raise ValueError("Artifact revision or builder is not eligible for publishing")
         _validate_target(data, package, root)
-        _require_native_report(artifacts, archive, digest, package, data["target"])
+        _require_completion_report(root, artifacts, archive, data)
         group = groups.setdefault(package.name, {})
         if data["target"] in group:
             raise ValueError("Duplicate target artifact")

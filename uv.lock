@@ -667,24 +667,33 @@ name = "muxtools-binaries"
 version = "0.2.0"
 source = { editable = "." }
 dependencies = [
-    { name = "av" },
     { name = "httpx2" },
-    { name = "numpy" },
     { name = "packaging" },
     { name = "py-cpuinfo2" },
-    { name = "py7zr" },
     { name = "pydantic" },
-    { name = "tombi" },
     { name = "tomlkit" },
-    { name = "zimtohrli" },
     { name = "zstandard" },
 ]
 
 [package.dev-dependencies]
+build = [
+    { name = "py7zr" },
+    { name = "tombi" },
+]
+comparison = [
+    { name = "av" },
+    { name = "numpy" },
+    { name = "zimtohrli" },
+]
 dev = [
+    { name = "av" },
     { name = "mypy" },
+    { name = "numpy" },
+    { name = "py7zr" },
     { name = "pytest" },
     { name = "ruff" },
+    { name = "tombi" },
+    { name = "zimtohrli" },
 ]
 docs = [
     { name = "zensical" },
@@ -692,24 +701,33 @@ docs = [
 
 [package.metadata]
 requires-dist = [
-    { name = "av", specifier = ">=16,<17" },
     { name = "httpx2", specifier = ">=2,<3" },
-    { name = "numpy", specifier = ">=2,<3" },
     { name = "packaging", specifier = ">=25" },
     { name = "py-cpuinfo2", specifier = ">=10,<11" },
-    { name = "py7zr", specifier = ">=1,<2" },
     { name = "pydantic", specifier = ">=2.11,<3" },
-    { name = "tombi", specifier = ">=0.7,<1" },
     { name = "tomlkit", specifier = ">=0.13,<1" },
-    { name = "zimtohrli", specifier = ">=0.2.1.post1,<0.3" },
     { name = "zstandard", specifier = ">=0.23,<1" },
 ]
 
 [package.metadata.requires-dev]
+build = [
+    { name = "py7zr", specifier = ">=1,<2" },
+    { name = "tombi", specifier = ">=0.7,<1" },
+]
+comparison = [
+    { name = "av", specifier = ">=16,<17" },
+    { name = "numpy", specifier = ">=2,<3" },
+    { name = "zimtohrli", specifier = ">=0.2.1.post1,<0.3" },
+]
 dev = [
+    { name = "av", specifier = ">=16,<17" },
     { name = "mypy", specifier = ">=1.17.1" },
+    { name = "numpy", specifier = ">=2,<3" },
+    { name = "py7zr", specifier = ">=1,<2" },
     { name = "pytest", specifier = ">=8,<10" },
     { name = "ruff", specifier = ">=0.12" },
+    { name = "tombi", specifier = ">=0.7,<1" },
+    { name = "zimtohrli", specifier = ">=0.2.1.post1,<0.3" },
 ]
 docs = [{ name = "zensical", specifier = ">=0.0.60,<0.1" }]
 

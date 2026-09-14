@@ -2,7 +2,7 @@
 
 Run these commands from the repository root. Install Git, uv, and Docker first.
 The Python project requires Python 3.12 or later. Docker must run Linux containers,
-including when you build Windows packages.
+including when you build Windows or macOS packages.
 
 ## Prepare the checkout
 
@@ -31,7 +31,7 @@ The build command prints the archive path. Use that path to test the package
 on Linux, for example:
 
 ```sh
-uv run muxtools-build test dist/flac-1.5.0-linux-x86_64.tar.zst
+uv run muxtools-build test dist/flac-1.5.0.post1-linux-x86_64.tar.zst
 ```
 
 To use the adopted image from `builder/lock.toml`, omit `--image`. Use `--jobs 4`
@@ -44,7 +44,8 @@ uv run muxtools-build build flac --target windows-x86_64 --image muxtools-builde
 ```
 
 Copy the resulting archive to Windows and run `muxtools-build test` there.
-CI supplies native runners for both targets.
+CI selects the matching native runner from the target registry. Windows and
+macOS runners use deferred comparison, described in [Checks and tests](architecture/testing.md#deferred-comparison).
 `--structural-only` checks archive structure without running the tools;
 it does not replace native tests.
 
@@ -58,6 +59,7 @@ for imported tools and [Checks and tests](architecture/testing.md) for test beha
 ```sh
 uv run muxtools-build validate
 uv run ruff check src tests builder packages
+uv run ruff format --check src tests builder packages
 uv run pytest -q
 uv run mypy
 uv run tombi format --check

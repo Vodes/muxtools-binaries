@@ -38,11 +38,10 @@ def metadata(package: Package, target: str, revision: str, image: str, channel: 
     if config.asset:
         data["provenance"]["asset"] = config.asset.model_dump()
     if package.type == "source-build":
-        from .build import TRIPLE
+        from .build import compiler_tools
 
-        compiler = config.compiler
-        executable = (TRIPLE + "-" if target.startswith("windows") and compiler == "gcc" else "") + compiler
-        linker = "ld.lld" if compiler == "clang" else (TRIPLE + "-" if target.startswith("windows") else "") + "ld"
+        tools = compiler_tools(target, config.compiler)
+        executable, linker = tools["CC"], tools["LD"]
         data["build"] = {
             key: getattr(config, key)
             for key in ("compiler", "lto", "cpu_levels", "extra_cflags", "extra_cxxflags", "extra_ldflags")
@@ -70,7 +69,10 @@ def validate_layout(stage: Path, data: dict[str, Any]) -> None:
         raise ValueError("Invalid artifact identity")
     if type(data.get("version_code")) is not int or data["version_code"] < 1 or data.get("target") not in TARGETS:
         raise ValueError("Invalid artifact version code or target")
-    if data.get("schema_version") not in (1, 2, 3) or data.get("provenance", {}).get("channel") not in ("test", "release"):
+    if data.get("schema_version") not in (1, 2, 3) or data.get("provenance", {}).get("channel") not in (
+        "test",
+        "release",
+    ):
         raise ValueError("Unsupported metadata schema or channel")
     if not isinstance(data.get("description", ""), str):
         raise ValueError("Invalid artifact description")
@@ -83,13 +85,15 @@ def validate_layout(stage: Path, data: dict[str, Any]) -> None:
     for executable, variants in data["binaries"].items():
         if not variants or not set(variants) <= set(TIERS):
             raise ValueError("Invalid binary tiers")
+        if TARGETS[data["target"]].arch == "arm64" and set(variants) != {"baseline"}:
+            raise ValueError("ARM64 requires baseline-only layout")
         if "baseline" not in variants:
             raise ValueError(f"Missing baseline for {executable}")
         for name in variants.values():
             path = stage / safe_path(name)
             if not path.is_file():
                 raise ValueError(f"Missing executable: {name}")
-            if data["target"].startswith("linux") and not path.stat().st_mode & 0o111:
+            if TARGETS[data["target"]].os != "windows" and os.name != "nt" and not path.stat().st_mode & 0o111:
                 raise ValueError(f"Missing executable mode: {name}")
     if data["schema_version"] == 2:
         for name in archive_checks(data).files:

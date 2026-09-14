@@ -1,4 +1,45 @@
 schema_version = 1
 base = "quay.io/pypa/manylinux_2_34_x86_64@sha256:934419fa742ff922855f464203cc0ad5afe3317a8541712a00cf3dc7fb893fc8"
-# Filled by the maintainer with the qualified builder workflow's digest before releasing.
+# Existing x86-only image. Adopt the six-target workflow's qualified digest before enabling new package targets.
 image = "ghcr.io/vodes/muxtools-builder@sha256:88c194d0de9a2f1c01ffab08829113bbd07278000ef2359bf226f972b27b603e"
+
+[linux_arm64]
+crosstool_ng = "1.28.0"
+url = "https://github.com/crosstool-ng/crosstool-ng/releases/download/crosstool-ng-1.28.0/crosstool-ng-1.28.0.tar.xz"
+sha256 = "5750e29a2bda5cd8d67900592576b1670a1987a4dcd5e4f6beae09138a1f5699"
+gcc = "14.3.0"
+glibc = "2.34"
+linux_headers = "4.20.17"
+gcc_sha256 = "e0dc77297625631ac8e50fa92fffefe899a4eb702592da5c32ef04e2293aca3a"
+glibc_sha256 = "44d26a1fe20b8853a48f470ead01e4279e869ac149b195dda4e44a195d981ab2"
+config = "builder/linux-arm64.config"
+
+[llvm_mingw]
+# Ubuntu 20.04 host binaries run with the manylinux builder's glibc/libstdc++.
+version = "20250319"
+url = "https://github.com/mstorsjo/llvm-mingw/releases/download/20250319/llvm-mingw-20250319-ucrt-ubuntu-20.04-x86_64.tar.xz"
+sha256 = "ab2a1489416fa82b3e85e88cb877053ee8a591993408caf076737d8de5ae72ca"
+crt = "ucrt"
+architectures = ["aarch64"]
+
+[xwin]
+version = "0.10.0"
+url = "https://github.com/Jake-Shadle/xwin/releases/download/0.10.0/xwin-0.10.0-x86_64-unknown-linux-musl.tar.gz"
+sha256 = "d870eb4b2f390878af6da1ccd3cf321d22fcb72720984853b4be732ae597fc88"
+manifest_url = "https://download.visualstudio.microsoft.com/download/pr/f8d58e41-102a-4347-a567-60d7235da3b5/469b3396a3493df91870ce13c52015a92283a2d1c6fd12e5f7e55669be8050ca/VisualStudio.vsman"
+# Hash of the served bytes; the channel manifest advertises a different digest.
+manifest_sha256 = "b60efac8768e31b4b0bb74d312a3fd3145de9bef7f794c050d498d079e540e11"
+sdk = "10.0.26100"
+crt = "14.44.17.14"
+crt_payload_version = "14.44.35220"
+architectures = ["x86_64", "aarch64"]
+
+[macos]
+revision = "27d21e4977c9751d01199c7a226a6faf494c3dd9"
+url = "https://codeload.github.com/tpoechtrager/osxcross/tar.gz/27d21e4977c9751d01199c7a226a6faf494c3dd9"
+sha256 = "c94952432565db84f1b3a9e4ba3d44344b1464fcbeb8c7580ab9db1e7c22834a"
+flavor = "llvm"
+sdk = "15.5"
+sdk_url = "https://github.com/joseluisq/macosx-sdks/releases/download/15.5/MacOSX15.5.sdk.tar.xz"
+sdk_sha256 = "c15cf0f3f17d714d1aa5a642da8e118db53d79429eb015771ba816aa7c6c1cbd"
+deployment_target = "13.0"

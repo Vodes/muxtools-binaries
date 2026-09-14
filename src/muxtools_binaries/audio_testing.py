@@ -77,8 +77,14 @@ def exercise_audio(
         run([stage / filename, *args], cwd=cwd, timeout=120)
         if not output.is_file() or not output.stat().st_size:
             raise ValueError(f"{label} produced no audio output")
-        try:
-            scores = audio_quality(reference, decode_audio(output))
-        except ValueError as error:
-            raise ValueError(f"{label}: {error}") from error
-        print(f"{label}: Zimtohrli MOS per channel: {', '.join(f'{score:.3f}' for score in scores)}")
+        compare_audio(encoder, tier, output, reference)
+
+
+def compare_audio(encoder: AudioCheck, tier: str, output: Path, reference: NDArray[np.float32]) -> None:
+    mode = "lossless" if encoder.lossless else "lossy"
+    label = f"{encoder.command}:{tier}:{mode}"
+    try:
+        scores = audio_quality(reference, decode_audio(output))
+    except ValueError as error:
+        raise ValueError(f"{label}: {error}") from error
+    print(f"{label}: Zimtohrli MOS per channel: {', '.join(f'{score:.3f}' for score in scores)}")

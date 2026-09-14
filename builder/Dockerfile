@@ -4,10 +4,17 @@ RUN dnf install -y \
       gcc gcc-c++ clang llvm llvm-devel lld binutils \
       cmake ninja-build meson autoconf automake libtool gettext-devel pkgconf-pkg-config \
       nasm yasm make patch perl bison flex texinfo zstd \
+      help2man ncurses-devel gperf unzip wget xz git file \
       mingw64-gcc mingw64-gcc-c++ mingw64-headers mingw64-crt \
       mingw64-winpthreads-static \
     && dnf clean all
 ENV PATH="/opt/python/cp312-cp312/bin:${PATH}" MUXTOOLS_BUILDER=1
 COPY builder/lock.toml /opt/builder/lock.toml
+COPY builder/linux-arm64.config builder/install-toolchain.py /opt/builder/
+RUN python /opt/builder/install-toolchain.py linux_arm64
+RUN python /opt/builder/install-toolchain.py xwin
+RUN python /opt/builder/install-toolchain.py macos
+RUN python /opt/builder/install-toolchain.py llvm_mingw
+ENV PATH="/opt/cross/aarch64-unknown-linux-gnu/bin:/opt/osxcross/bin:${PATH}"
 RUN rpm -qa --qf '%{NAME} %{VERSION}-%{RELEASE}.%{ARCH}\n' | sort > /opt/builder/packages.txt
 WORKDIR /work

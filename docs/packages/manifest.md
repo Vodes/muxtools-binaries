@@ -70,14 +70,15 @@ target and CPU level. A custom recipe controls its own dependency steps.
 
 ## Target settings
 
-The registered target names are `linux-x86_64` and `windows-x86_64`. There is no
-top-level target-default table. Declare each target separately.
+Linux, Windows, and macOS each have `x86_64` and `arm64` targets. See the
+[target and compiler table](../architecture/builder.md#targets-and-pinned-toolchains).
+There is no target-default table. Declare each target separately.
 
 | Field in `[targets.<target>]` | Type | Default | Meaning and limits |
 | --- | --- | --- | --- |
-| `compiler` | String | `"gcc"` | `gcc` or `clang`. Used by source-build helpers. |
+| `compiler` | String | `"gcc"` | `gcc`, `clang`, or `clang-msvc`, subject to the target registry. |
 | `lto` | Boolean false or string | `false` | `false`, `"full"`, or `"thin"`. Thin LTO requires Clang. `true` is not accepted. |
-| `cpu_levels` | String array | `["baseline"]` | Unique entries, with `baseline` first. Other values: `avx2`, `avx512`, `zn4`. Imports must use only `baseline`. |
+| `cpu_levels` | String array | `["baseline"]` | Unique entries, with `baseline` first. Other values: `avx2`, `avx512`, `zn4`. Imports and ARM64 must use only `baseline`. |
 | `extra_cflags` | String array | `[]` | Extra C compiler arguments. |
 | `extra_cxxflags` | String array | `[]` | Extra C++ compiler arguments. |
 | `extra_ldflags` | String array | `[]` | Extra linker arguments. |

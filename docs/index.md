@@ -4,8 +4,8 @@ render_macros: true
 
 # muxtools-binaries
 
-This project builds and packages portable command-line tools for Linux and Windows
-x86-64.
+This project builds and packages portable command-line tools for Linux, Windows, and macOS
+on x86-64 and ARM64.
 
 | Task | Start here |
 | --- | --- |
@@ -21,7 +21,7 @@ x86-64.
 
 {{ available_packages() }}
 
-Source-built Linux executables target x86-64-v2 and glibc 2.34.
+Source-built Linux executables require glibc 2.34. The x86-64 baseline is x86-64-v2.
 x265 also supplies AVX2, AVX512, and Zen 4 variants.
 See [runtime requirements](architecture/builder.md#imported-runtime-requirements)
 before using imported tools.

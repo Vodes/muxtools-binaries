@@ -1,19 +1,19 @@
-import os
 import platform
 import re
-import struct
 import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from cpuinfo import get_cpu_info
 
 from .artifacts import read_metadata, write_report
-from .audio_testing import exercise_audio
+from .binary_checks import binary_format, runtime_audit, structural  # noqa: F401
 from .checks import AudioCheck, CheckSuite, CommandCheck
-from .io import Command, extract, run
+from .evidence import CaseResult, NativeResult, compare_bundle, revision
+from .io import Command, extract, run, sha256
+from .models import TARGETS
 from .recipes import checks_for_archive
 
 
@@ -83,104 +83,48 @@ def cpu_state() -> tuple[set[str], int]:
     return set(), 0
 
 
-def binary_format(path: Path) -> Literal["elf", "pe", "script"]:
-    with path.open("rb") as stream:
-        header = stream.read(64)
-        if header.startswith(b"\x7fELF"):
-            if len(header) < 20 or header[4:6] != b"\x02\x01" or struct.unpack_from("<H", header, 18)[0] != 62:
-                raise ValueError(f"Expected ELF x86-64: {path}")
-            return "elf"
-        if header.startswith(b"MZ"):
-            if len(header) < 64:
-                raise ValueError(f"Truncated PE: {path}")
-            stream.seek(struct.unpack_from("<I", header, 60)[0])
-            pe = stream.read(6)
-            if pe != b"PE\0\0d\x86":
-                raise ValueError(f"Expected PE x86-64: {path}")
-            return "pe"
-        if header.startswith(b"#!/bin/sh\n"):
-            return "script"
-    raise ValueError(f"Unknown executable format: {path}")
-
-
-def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = None) -> None:
-    expected = "pe" if data["target"].startswith("windows") else "elf"
-    files = suite.files if suite else {}
-    for variants in data["binaries"].values():
-        for filename in variants.values():
-            kind = binary_format(stage / filename)
-            if kind != files.get(filename, expected):
-                raise ValueError(f"Wrong target format: {filename}")
-    for filename, expected_format in files.items():
-        if binary_format(stage / filename) != expected_format:
-            raise ValueError(f"Wrong required file format: {filename}")
-    if os.name == "nt":
-        return
-    minimum = tuple(map(int, data.get("runtime", {}).get("glibc", "2.34").split(".")))
-    allowed = {
-        "libc.so.6",
-        "libm.so.6",
-        "libmvec.so.1",
-        "libdl.so.2",
-        "libpthread.so.0",
-        "librt.so.1",
-        "libresolv.so.2",
-        "ld-linux-x86-64.so.2",
-        "libutil.so.1",
-    }
-    allowed.update(data.get("runtime", {}).get("requirements", []))
-    for path in stage.rglob("*"):
-        if not path.is_file():
-            continue
-        with path.open("rb") as stream:
-            magic = stream.read(4)
-        if magic == b"\x7fELF":
-            binary_format(path)
-            details = run(["readelf", "--version-info", "--dynamic", path], capture=True).stdout
-            versions = [
-                tuple(map(int, version.split("."))) for version in re.findall(r"GLIBC_(\d+\.\d+(?:\.\d+)?)", details)
-            ]
-            if versions and max(versions) > minimum:
-                raise ValueError(f"{path.name} needs glibc {max(versions)}, configured minimum is {minimum}")
-            for library in re.findall(r"Shared library: \[(.*?)\]", details):
-                if library not in allowed and not list(stage.rglob(library)):
-                    raise ValueError(f"Unbundled runtime dependency: {library} in {path.name}")
-            if re.search(r"\((?:RUNPATH|RPATH)\).*\[(?:/(?:tmp|opt|work)|.*?/build/)", details):
-                raise ValueError(f"Build directory runtime path in {path.name}")
-        elif magic[:2] == b"MZ":
-            binary_format(path)
-            details = run(["objdump", "-p", path], capture=True).stdout
-            for library in re.findall(r"DLL Name: (\S+)", details):
-                if library.lower().startswith(("libgcc", "libstdc++", "libwinpthread")):
-                    if not any(p.name.lower() == library.lower() for p in stage.rglob("*.dll")):
-                        raise ValueError(f"Unbundled compiler runtime: {library}")
+def native_target() -> str:
+    system = {"Linux": "linux", "Windows": "windows", "Darwin": "macos"}.get(platform.system())
+    arch = {"amd64": "x86_64", "x86_64": "x86_64", "aarch64": "arm64", "arm64": "arm64"}.get(platform.machine().lower())
+    target = f"{system}-{arch}"
+    if target not in TARGETS:
+        raise ValueError(f"Unsupported native platform: {platform.system()} {platform.machine()}")
+    return target
 
 
 def exercise(
     stage: Path, data: dict[str, Any], suite: CheckSuite, cwd: Path, tiers: set[str], audio_source: Path
-) -> None:
+) -> list[CaseResult]:
+    results = []
     for index, check in enumerate(suite.functional):
         work = cwd / f"check-{index}"
         work.mkdir()
-        variants = data["binaries"][check.command]
+        source = audio_source.resolve()
         if isinstance(check, AudioCheck):
-            exercise_audio(stage, check, variants, work, tiers, audio_source)
-            continue
-        source = work / "input.yuv"
-        source.write_bytes(bytes(check.width * check.height * 3 // 2 * (1 if check.bit_depth == 8 else 2)))
-        for tier, filename in variants.items():
-            if tier not in tiers:
-                continue
-            output = work / f"{tier}.{check.suffix}"
-            args = [
-                arg.format(
-                    source=source, output=output, width=check.width, height=check.height, bit_depth=check.bit_depth
-                )
-                for arg in check.args
-            ]
-            run([stage / filename, *args], cwd=work, timeout=120)
-            if not output.is_file() or not output.stat().st_size:
-                raise ValueError(f"{check.command}:{tier} produced no video output")
+            if not source.is_file():
+                raise ValueError(f"Missing audio fixture: {source}. Run git submodule update --init --recursive.")
+            fields: dict[str, Any] = {}
+        else:
+            source = work / "input.yuv"
+            source.write_bytes(bytes(check.width * check.height * 3 // 2 * (1 if check.bit_depth == 8 else 2)))
+            fields = dict(width=check.width, height=check.height, bit_depth=check.bit_depth)
+        for tier, filename in data["binaries"][check.command].items():
+            case = CaseResult(
+                case=f"functional:{index}:{tier}",
+                index=index,
+                tier=tier,
+                status="completed" if tier in tiers else "skipped",
+            )
+            if tier in tiers:
+                output = work / f"{tier}.{check.suffix}"
+                args = [arg.format(source=source, output=output, **fields) for arg in check.args]
+                run([stage / filename, *args], cwd=work, timeout=120)
+                if not output.is_file() or not output.stat().st_size:
+                    raise ValueError(f"{check.command}:{tier} produced no {check.kind} output")
+                case.output = output.relative_to(cwd).as_posix()
+                case.sha256 = sha256(output)
+            results.append(case)
+    return results
 
 
 def run_smoke(command: Command, check: CommandCheck, *, cwd: Path | None = None) -> None:
@@ -203,8 +147,12 @@ def test_archive(
     root: Path = Path("."),
     smoke: bool = True,
     report: Path | None = None,
+    results: Path | None = None,
     audio_source: Path = Path("tests/data/audio/wav_source.wav"),
 ) -> list[str]:
+    if results is not None and (not smoke or report is not None):
+        raise ValueError("--results requires native execution and cannot write a completion report")
+    archive, root = archive.resolve(), root.resolve()
     with tempfile.TemporaryDirectory(prefix="muxtools test ") as temporary:
         work = Path(temporary)
         stage = work / "package with spaces"
@@ -213,29 +161,51 @@ def test_archive(
         suite = checks_for_archive(data, root) if data["schema_version"] != 1 else None
         structural(stage, data, suite)
         checks = ["structure"]
-        if smoke:
-            target_os = "windows" if os.name == "nt" else "linux"
-            if not data["target"].startswith(target_os) or platform.machine().lower() not in ("amd64", "x86_64"):
-                raise ValueError("Smoke tests require the native target runner")
-            suite = suite or checks_for_archive(data, root)
-            features, xcr0 = cpu_state()
-            tested = {"baseline"}
-            cwd = work / "unrelated directory"
-            cwd.mkdir()
-            for executable, variants in data["binaries"].items():
-                for tier, filename in variants.items():
-                    if tier != "baseline" and not supports(tier, features, xcr0):
-                        checks.append(f"skip:{executable}:{tier}")
-                        continue
-                    run_smoke(
-                        [stage / filename, *suite.smoke[executable].args],
-                        suite.smoke[executable],
-                        cwd=cwd,
+        if not smoke:
+            if report:
+                write_report(archive, checks, report)
+            return checks
+        target = native_target()
+        if target != data["target"]:
+            raise ValueError("Smoke tests require the native target runner")
+        suite = suite or checks_for_archive(data, root)
+        checkout = revision(root)
+        if data.get("builder", {}).get("revision", checkout) != checkout:
+            raise ValueError("Use the checkout recorded in builder.revision")
+        features, xcr0 = cpu_state() if TARGETS[target].arch == "x86_64" else (set(), 0)
+        tiers = {
+            tier
+            for variants in data["binaries"].values()
+            for tier in variants
+            if tier == "baseline" or supports(tier, features, xcr0)
+        }
+        bundle = results.resolve() / archive.name if results else work / "native results"
+        bundle.mkdir(parents=True, exist_ok=False)
+        cases = []
+        for executable, variants in data["binaries"].items():
+            for tier, filename in variants.items():
+                completed = tier in tiers
+                if completed:
+                    run_smoke([stage / filename, *suite.smoke[executable].args], suite.smoke[executable], cwd=bundle)
+                checks.append(f"{'run' if completed else 'skip'}:{executable}:{tier}")
+                cases.append(
+                    CaseResult(
+                        case=f"run:{executable}:{tier}", tier=tier, status="completed" if completed else "skipped"
                     )
-                    tested.add(tier)
-                    checks.append(f"run:{executable}:{tier}")
-            exercise(stage, data, suite, cwd, tested, audio_source)
-            checks.append("smoke")
-        if report:
-            write_report(archive, checks, report)
+                )
+        cases.extend(exercise(stage, data, suite, bundle, tiers, audio_source))
+        checks.append("smoke")
+        native = NativeResult(
+            archive=archive.name,
+            sha256=sha256(archive),
+            revision=checkout,
+            target=target,
+            cases=cases,
+            fixture_sha256=sha256(audio_source) if any(isinstance(c, AudioCheck) for c in suite.functional) else None,
+        )
+        (bundle / "native.json").write_text(native.model_dump_json(indent=2) + "\n")
+        if results is None:
+            completion = compare_bundle(archive, bundle, root, audio_source)
+            if report:
+                report.write_text(completion.model_dump_json(indent=2) + "\n")
         return checks

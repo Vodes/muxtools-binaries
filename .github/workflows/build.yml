@@ -48,6 +48,7 @@ jobs:
           echo "image=$image" >> "$GITHUB_OUTPUT"
       - run: uv run --frozen muxtools-build validate
       - run: uv run --frozen ruff check src tests builder packages
+      - run: uv run --frozen ruff format --check src tests builder packages
       - run: uv run --frozen tombi format --check
       - run: uv run --frozen tombi lint --error-on-warnings
       - run: uv run --frozen mypy
@@ -85,6 +86,8 @@ jobs:
       matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          submodules: true
       - uses: astral-sh/setup-uv@v10.0.1
       - name: Resolve builder
         id: builder
@@ -121,32 +124,68 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           submodules: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
       - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: '3.12'
       - uses: actions/download-artifact@v8.0.1
         with:
           name: package-${{ matrix.package }}-${{ matrix.target }}
           path: dist
-      - name: Native smoke tests
-        shell: bash
-        run: |
-          if [ "$RUNNER_OS" = Linux ]; then
-            sudo apt-get update
-            sudo apt-get install -y libfuse2t64
-          fi
-          for archive in dist/*.tar.zst; do
-            uv run --frozen muxtools-build test "$archive" --report "$archive.report.json"
-          done
-      - name: Linux ABI baseline smoke tests
+      - name: Install Linux runtime
         if: runner.os == 'Linux'
-        run: uv run --frozen python builder/baseline-test.py dist/*.tar.zst
+        run: sudo apt-get update && sudo apt-get install -y libfuse2t64
+      - name: Native checks and Linux ABI baseline
+        run: uv run --frozen --no-default-groups python builder/native-test.py
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: report-${{ matrix.package }}-${{ matrix.target }}
-          path: dist/*.report.json
+          name: native-${{ matrix.package }}-${{ matrix.target }}
+          path: native-results/
           if-no-files-found: error
 
+  compare:
+    needs: [prepare, smoke]
+    if: needs.prepare.outputs.has_packages == 'true'
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    steps:
+      - name: Start total comparison timer
+        run: echo "COMPARISON_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+      - uses: actions/checkout@v7.0.1
+        with:
+          submodules: true
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: package-*
+          path: artifacts
+      - uses: actions/download-artifact@v8.0.1
+        with:
+          pattern: native-*
+          path: artifacts
+      - name: Validate native evidence and compare audio
+        run: uv run --frozen --no-default-groups --group comparison muxtools-build compare --artifacts artifacts --reports reports
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: completion-reports
+          path: reports/
+          if-no-files-found: error
+      - name: Report total comparison time
+        if: always()
+        run: |
+          elapsed=$(($(date +%s) - COMPARISON_STARTED))
+          echo "Comparison job: ${elapsed}s of 900s, including checkout, Python setup, dependencies, downloads and report upload." >> "$GITHUB_STEP_SUMMARY"
+          test "$elapsed" -lt 900
+
   publish:
-    needs: [prepare, build, smoke]
+    needs: [prepare, build, smoke, compare]
     if: needs.prepare.outputs.has_packages == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish
     runs-on: ubuntu-24.04
     concurrency:
@@ -156,6 +195,8 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          submodules: true
       - uses: astral-sh/setup-uv@v10.0.1
       - uses: actions/download-artifact@v8.0.1
         with:
@@ -163,4 +204,4 @@ jobs:
       - env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-        run: uv run --frozen muxtools-build publish --artifacts artifacts --repository "$REPOSITORY" --publish
+        run: uv run --frozen --no-default-groups muxtools-build publish --artifacts artifacts --repository "$REPOSITORY" --publish

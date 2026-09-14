@@ -10,7 +10,6 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import httpx2
-import py7zr
 import zstandard
 
 from .models import safe_path
@@ -94,6 +93,8 @@ def extract(archive: Path, destination: Path, kind: str) -> None:
                     modified = time.mktime((*member.date_time, 0, 0, -1))
                     os.utime(output, (modified, modified))
     elif kind == "7z":
+        import py7zr
+
         with py7zr.SevenZipFile(archive) as source:
             seen = set()
             for item in source.list():

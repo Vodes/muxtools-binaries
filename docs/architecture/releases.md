@@ -34,13 +34,14 @@ The adopted image must be available by registry digest.
 2. Run **Build and test** manually on `main`.
 3. Set `packages` to a comma-separated list, or leave it empty to build all packages.
 4. Enable **publish**.
-5. Inspect the build, native test, and publication results.
+5. Inspect the build, native test, comparison, and publication results.
 
 The publish checkbox defaults to off. The Python publisher also enforces the
 `workflow_dispatch`, `main`, and explicit publish gate. Normal binary build and
 test jobs use read-only repository permissions; only the publish job can write releases.
 
-Every declared target needs an archive and a matching native smoke report before
+Every declared target needs an archive and a matching version 2 completion report
+with native and comparison evidence before
 the package can upload. The publisher assembles and verifies each new package
 release as a draft, then publishes it.
 

@@ -1,12 +1,31 @@
 import re
 import tomllib
+from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 TIERS = ("baseline", "avx2", "avx512", "zn4")
-TARGETS = {"linux-x86_64": ("linux", "x86_64"), "windows-x86_64": ("windows", "x86_64")}
+
+
+@dataclass(frozen=True)
+class TargetInfo:
+    os: str
+    arch: str
+    binary_format: Literal["elf", "pe", "macho"]
+    runner: str
+    compilers: tuple[str, ...]
+
+
+TARGETS = {
+    "linux-x86_64": TargetInfo("linux", "x86_64", "elf", "ubuntu-24.04", ("gcc", "clang")),
+    "linux-arm64": TargetInfo("linux", "arm64", "elf", "ubuntu-24.04-arm", ("gcc", "clang")),
+    "windows-x86_64": TargetInfo("windows", "x86_64", "pe", "windows-2022", ("gcc", "clang", "clang-msvc")),
+    "windows-arm64": TargetInfo("windows", "arm64", "pe", "windows-11-arm", ("clang", "clang-msvc")),
+    "macos-x86_64": TargetInfo("macos", "x86_64", "macho", "macos-15-intel", ("clang",)),
+    "macos-arm64": TargetInfo("macos", "arm64", "macho", "macos-15", ("clang",)),
+}
 
 
 def safe_path(value: str) -> str:
@@ -53,7 +72,7 @@ class Runtime(Model):
 
 
 class Target(Model):
-    compiler: Literal["gcc", "clang"] = "gcc"
+    compiler: Literal["gcc", "clang", "clang-msvc"] = "gcc"
     lto: Literal[False, "full", "thin"] = False
     cpu_levels: list[Literal["baseline", "avx2", "avx512", "zn4"]] = Field(default=["baseline"])
     extra_cflags: list[str] = Field(default_factory=list)
@@ -99,6 +118,16 @@ class Package(Model):
         for target, config in self.targets.items():
             if target not in TARGETS:
                 raise ValueError(f"Target {target} has no registered toolchain")
+            info = TARGETS[target]
+            if config.compiler not in info.compilers:
+                raise ValueError(f"Unsupported compiler {config.compiler} for {target}")
+            if info.arch == "arm64" and config.cpu_levels != ["baseline"]:
+                raise ValueError("ARM64 supports only the generic ARMv8-A baseline")
+            if info.arch == "arm64" and any(
+                flag.removeprefix("/clang:").startswith(("-march", "-mcpu", "-mtune", "/arch:", "-mattr"))
+                for flag in config.extra_cflags + config.extra_cxxflags + config.extra_ldflags
+            ):
+                raise ValueError("ARM64 CPU flags are fixed to the generic ARMv8-A baseline")
             if self.type == "source-build":
                 if not self.source or config.asset:
                     raise ValueError("Source builds require source pins and cannot specify an imported asset")
@@ -111,7 +140,7 @@ class Package(Model):
         return self
 
     def binaries(self, target: str) -> dict[str, dict[str, str]]:
-        extension = ".exe" if TARGETS[target][0] == "windows" else ""
+        extension = ".exe" if TARGETS[target].os == "windows" else ""
         return {
             name: {
                 tier: name + ("" if tier == "baseline" else f".{tier}") + extension

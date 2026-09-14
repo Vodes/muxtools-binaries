@@ -7,6 +7,7 @@ import pytest
 
 from muxtools_binaries.artifacts import pack
 from muxtools_binaries.checks import default_checks
+from muxtools_binaries.evidence import CaseResult, ComparisonResult, CompletionReport, NativeResult
 from muxtools_binaries.io import sha256
 from muxtools_binaries.release import (
     GitHub,
@@ -63,13 +64,18 @@ def releases(package, tmp_path, monkeypatch, recipe_root, request):
             data["description"] = package.description
         archive = pack(stage, data, artifacts)
         archive.with_name(archive.name + ".report.json").write_text(
-            json.dumps(
-                dict(
+            CompletionReport(
+                archive=archive.name,
+                sha256=sha256(archive),
+                native=NativeResult(
+                    archive=archive.name,
                     sha256=sha256(archive),
-                    os="nt" if target.startswith("windows") else "posix",
-                    checks=["structure", "smoke", f"run:{package.name}:baseline"],
-                )
-            )
+                    revision="fixture-revision",
+                    target=target,
+                    cases=[CaseResult(case=f"run:{package.name}:baseline", tier="baseline", status="completed")],
+                ),
+                comparison=ComparisonResult(completed=[]),
+            ).model_dump_json()
         )
     return artifacts
 
@@ -81,7 +87,7 @@ def test_release_requires_complete_verified_artifacts(releases, package, broken)
         next(releases.glob("*.tar.zst")).unlink()
     else:
         next(releases.glob("*.report.json")).write_text("{}")
-    with pytest.raises(ValueError, match="Incomplete|Missing native"):
+    with pytest.raises(ValueError, match="Incomplete|validation error|completion report"):
         collect(releases, releases)
 
 
@@ -360,3 +366,23 @@ def test_draft_retry_replaces_old_bytes_and_verifies_upload(tmp_path, monkeypatc
         with pytest.raises(ValueError, match="Cannot replace"):
             api.upload(dict(release, draft=False), archive, replace=True)
         assert [method for method, _ in events] == ["GET"]
+
+
+@pytest.mark.parametrize("damage", ["native-only", "wrong-target", "duplicate-report", "missing-comparison"])
+def test_release_requires_complete_evidence(releases, damage):
+    from muxtools_binaries.release import collect
+
+    path = next(releases.glob("*.report.json"))
+    report = json.loads(path.read_text())
+    if damage == "native-only":
+        report = report["native"]
+    elif damage == "wrong-target":
+        report["native"]["target"] = "macos-arm64"
+    elif damage == "missing-comparison":
+        del report["comparison"]
+    else:
+        (releases / "duplicate").mkdir()
+        shutil.copy2(path, releases / "duplicate" / path.name)
+    path.write_text(json.dumps(report))
+    with pytest.raises(ValueError):
+        collect(releases, releases)

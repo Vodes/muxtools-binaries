@@ -8,9 +8,10 @@ from pathlib import Path
 import httpx2
 
 from .artifacts import metadata, pack, read_metadata
+from .binary_checks import runtime_audit
 from .build import builder_image, produce
 from .io import run
-from .models import load_packages
+from .models import TARGETS, load_packages
 from .recipes import checks_for_archive, load_recipe, recipe_checks
 from .testing import structural, test_archive
 
@@ -38,6 +39,10 @@ def _parser() -> argparse.ArgumentParser:
     test.add_argument("archive", type=Path)
     test.add_argument("--structural-only", action="store_true")
     test.add_argument("--report", type=Path)
+    test.add_argument("--results", type=Path)
+    compare = commands.add_parser("compare")
+    compare.add_argument("--artifacts", type=Path, required=True)
+    compare.add_argument("--reports", type=Path, required=True)
     release = commands.add_parser("publish")
     release.add_argument("--artifacts", type=Path, required=True)
     release.add_argument("--repository", required=True)
@@ -76,7 +81,7 @@ def _matrix(root: Path, names: str, changed_from: str | None) -> dict[str, list[
             {
                 "package": p.name,
                 "target": target,
-                "runner": "windows-2022" if target.startswith("windows") else "ubuntu-24.04",
+                "runner": TARGETS[target].runner,
             }
             for p in packages.values()
             for target in p.targets
@@ -118,6 +123,9 @@ def _build_in_container(root: Path, args: argparse.Namespace, image: str, revisi
             "uv",
             "run",
             "--frozen",
+            "--no-default-groups",
+            "--group",
+            "build",
             "muxtools-build",
             "build",
             args.package,
@@ -148,6 +156,7 @@ def _build(root: Path, args: argparse.Namespace) -> None:
         stage, checks = produce(root, package, args.target, args.jobs)
         data = metadata(package, args.target, revision, image, args.channel)
         structural(stage, data, checks)
+        runtime_audit(stage, data)
         print(pack(stage, data, root / "dist"))
 
 
@@ -178,9 +187,14 @@ def main() -> int:
                     root=root,
                     smoke=not args.structural_only,
                     report=args.report,
+                    results=args.results,
                     audio_source=root / "tests/data/audio/wav_source.wav",
                 )
             )
+        elif args.command == "compare":
+            from .evidence import compare_artifacts
+
+            print(compare_artifacts(args.artifacts, args.reports, root, root / "tests/data/audio/wav_source.wav"))
         elif args.command == "publish":
             from .release import publish
 
