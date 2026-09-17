@@ -6,8 +6,9 @@ contents of `[build]` and `[update]`. Unknown fields are rejected, except for ke
 inside dictionaries that a model explicitly allows, such as x265's CMake definitions.
 
 Run `uv run muxtools-build validate` after an edit. It validates all manifests,
-merged recipe options, and check definitions. Build-system options still need a
-real build to confirm that upstream accepts them.
+merged recipe options, and check definitions, and type-checks each recipe with
+`mypy`. Build-system options still need a real build to confirm that upstream
+accepts them.
 
 ## Top-level fields
 

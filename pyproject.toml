@@ -41,6 +41,8 @@ allow_redefinition_new = true
 files = ["src", "tests", "builder", "packages"]
 explicit_package_bases = true
 mypy_path = ["$MYPY_CONFIG_FILE_DIR/src", "$MYPY_CONFIG_FILE_DIR/stubs"]
+# Hyphenated package directories give every recipe the same module name.
+exclude = ["^packages/[^/]+/recipe\\.py$"]
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"
