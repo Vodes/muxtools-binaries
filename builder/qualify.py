@@ -95,6 +95,7 @@ def main() -> None:
                 "meson",
                 "nasm",
                 "yasm",
+                "gperf",
             )
         )
     )
