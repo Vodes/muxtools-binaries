@@ -56,6 +56,6 @@ def test_archive_executes_checks_and_skips_unsupported_variants(tmp_path, monkey
     optimized.chmod(0o755)
     archive_data["checks"]["files"]["example.avx2"] = "script"
     archive = pack(stage, archive_data, tmp_path / "dist")
-    monkeypatch.setattr("muxtools_binaries.testing.cpu_state", lambda: (set(), 0))
+    monkeypatch.setattr("muxtools_binaries.testing.cpu_state", set)
     report = check_archive(archive)
     assert {"structure", "smoke", "run:example:baseline", "skip:example:avx2"} <= set(report)

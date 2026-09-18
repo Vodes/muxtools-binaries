@@ -38,6 +38,7 @@ class Source(Model):
     repository: str = Field(pattern=r"^https://")
     tag: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
     commit: str = Field(pattern=r"^[0-9a-f]{40}$")
+    recursive: bool = False
 
 
 class Asset(Model):

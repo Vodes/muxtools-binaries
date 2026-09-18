@@ -29,10 +29,10 @@ The main helpers are:
 
 | Method | Behavior |
 | --- | --- |
-| `source(name, pin)` | Fetch and verify the pinned commit, create its local version tag, and copy top-level license notices. Returns the checkout path. |
+| `source(name, pin)` | Fetch and verify the pinned commit, optionally initialize submodules, create its local version tag, and copy top-level notices from the source and initialized submodules. Returns the checkout path. |
 | `environment()` | Return compiler, linker, CPU, LTO, and private dependency settings for the current target and tier. |
 | `autotools(name, source, options=())` | Configure, build, and install into the private prefix. |
-| `cmake(name, source, definitions)` | Configure with Ninja and build. Returns the build directory; does not run install. |
+| `cmake(name, source, definitions, install=False)` | Configure with Ninja and build. Optionally install into the private prefix. Returns the build directory. |
 | `asset()` | Download the current target asset and verify SHA-256. Returns the cached file path. |
 | `stage_binary(source, executable)` | Copy a file to the standard name for that logical executable and current tier; set executable mode. |
 | `stage_binaries()` | Stage all declared executables from the private prefix's `bin/` directory. |

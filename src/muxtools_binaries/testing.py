@@ -16,13 +16,14 @@ from .checks import AudioCheck, CheckSuite, CommandCheck
 from .io import Command, extract, run
 from .recipes import checks_for_archive
 
-
-def supports(tier: str, features: set[str], xcr0: int) -> bool:
-    v2 = {"cx16", "lahf_lm", "popcnt", "sse3", "ssse3", "sse4_1", "sse4_2"}
-    v3 = v2 | {"avx", "avx2", "bmi1", "bmi2", "f16c", "fma", "lzcnt", "movbe", "xsave"}
-    v4 = v3 | {"avx512f", "avx512bw", "avx512cd", "avx512dq", "avx512vl"}
-    # znver4 enables more than v4; SSE4a and AVX512BF16 are deliberately disabled.
-    zn4 = v4 | {
+# Each tier adds to the previous tier's feature requirements.
+TIER_FEATURES = {
+    "baseline": {"cx16", "lahf_lm", "popcnt", "sse3", "ssse3", "sse4_1", "sse4_2"},
+    "avx2": {"avx", "avx2", "bmi1", "bmi2", "f16c", "fma", "lzcnt", "movbe", "xsave"},
+    "avx512": {"avx512f", "avx512bw", "avx512cd", "avx512dq", "avx512vl"},
+    # cpuinfo omits MWAITX, WBNOINVD, FSGSBASE, and CLZERO on some platforms.
+    # SSE4a and AVX512BF16 are deliberately disabled in the builds.
+    "zn4": {
         "aes",
         "pclmul",
         "rdrand",
@@ -31,7 +32,6 @@ def supports(tier: str, features: set[str], xcr0: int) -> bool:
         "sha",
         "clflushopt",
         "clwb",
-        "fsgsbase",
         "avx512ifma",
         "avx512vbmi",
         "avx512vbmi2",
@@ -42,20 +42,21 @@ def supports(tier: str, features: set[str], xcr0: int) -> bool:
         "vaes",
         "vpclmulqdq",
         "rdpid",
-        "wbnoinvd",
-        "clzero",
         "prfchw",
-        "mwaitx",
-    }
-    requirements = {"baseline": v2, "avx2": v3, "avx512": v4, "zn4": zn4}
-    return (
-        requirements[tier] <= features
-        and (tier == "baseline" or xcr0 & 6 == 6)
-        and (tier not in ("avx512", "zn4") or xcr0 & 0xE6 == 0xE6)
-    )
+    },
+}
 
 
-def cpu_state() -> tuple[set[str], int]:
+def supports(tier: str, features: set[str]) -> bool:
+    required: set[str] = set()
+    for level, additions in TIER_FEATURES.items():
+        required.update(additions)
+        if level == tier:
+            return required <= features
+    raise KeyError(tier)
+
+
+def cpu_state() -> set[str]:
     aliases = {
         "pni": "sse3",
         "abm": "lzcnt",
@@ -66,21 +67,32 @@ def cpu_state() -> tuple[set[str], int]:
     }
     try:
         features = {aliases.get(flag, flag).replace("avx512_", "avx512") for flag in get_cpu_info().get("flags", [])}
-        # cpuinfo merges CPUID and OS flags; hardware support alone cannot establish OS vector support.
+        # cpuinfo merges CPUID and OS flags, so remove vector features the OS cannot use.
         if sys.platform == "win32":
             import ctypes
 
             enabled = ctypes.WinDLL("kernel32").GetEnabledXStateFeatures
             enabled.restype = ctypes.c_uint64
             enabled.argtypes = []
-            return features, enabled()
-        if platform.system() == "Linux":
+            xstate = enabled()
+            avx_enabled = xstate & 6 == 6
+            avx512_enabled = xstate & 0xE6 == 0xE6
+        elif platform.system() == "Linux":
             flags = re.findall(r"^flags\s*:\s*(.*)$", Path("/proc/cpuinfo").read_text(), re.MULTILINE)
             enabled = set.intersection(*(set(line.split()) for line in flags)) if flags else set()
-            return features, (6 if "avx" in enabled else 0) | (0xE0 if "avx512f" in enabled else 0)
+            avx_enabled = "avx" in enabled
+            avx512_enabled = "avx512f" in enabled
+        else:
+            return set()
+        # Each higher tier includes these required features, so clearing them gates that tier and above.
+        if not avx_enabled:
+            features.discard("avx")
+        if not avx512_enabled:
+            features.discard("avx512f")
+        return features
     except Exception as error:
         print(f"CPU detection unavailable; skipping optimized variants: {error}")
-    return set(), 0
+    return set()
 
 
 def binary_format(path: Path) -> Literal["elf", "pe", "script"]:
@@ -218,13 +230,13 @@ def test_archive(
             if not data["target"].startswith(target_os) or platform.machine().lower() not in ("amd64", "x86_64"):
                 raise ValueError("Smoke tests require the native target runner")
             suite = suite or checks_for_archive(data, root)
-            features, xcr0 = cpu_state()
+            features = cpu_state()
             tested = {"baseline"}
             cwd = work / "unrelated directory"
             cwd.mkdir()
             for executable, variants in data["binaries"].items():
                 for tier, filename in variants.items():
-                    if tier != "baseline" and not supports(tier, features, xcr0):
+                    if tier != "baseline" and not supports(tier, features):
                         checks.append(f"skip:{executable}:{tier}")
                         continue
                     run_smoke(

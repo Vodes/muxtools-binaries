@@ -30,21 +30,6 @@ def _archive(ctx: BuildContext, name: str, url: str, digest: str) -> Path:
     return sources[0]
 
 
-def _install_cmake(ctx: BuildContext, name: str, definitions: dict[str, str | bool | int]) -> None:
-    source = ctx.source(name, ctx.package.dependencies[name])
-    build = ctx.cmake(
-        name,
-        source,
-        {
-            "BUILD_SHARED_LIBS": False,
-            "CMAKE_INSTALL_LIBDIR": "lib",
-            "CMAKE_PREFIX_PATH": str(ctx.prefix),
-            **definitions,
-        },
-    )
-    run(["cmake", "--install", build])
-
-
 def build(ctx: BuildContext) -> None:
     options = Options.model_validate(ctx.package.build)
     ctx.tier = "baseline"
@@ -71,10 +56,12 @@ def build(ctx: BuildContext) -> None:
     ctx.autotools(
         "fftw", _archive(ctx, "fftw", options.fftw_url, options.fftw_sha256), ["--disable-threads", "--disable-openmp"]
     )
-    _install_cmake(ctx, "id3tag", {"ZLIB_ROOT": str(ctx.prefix)})
-    _install_cmake(
-        ctx,
+    ctx.cmake(
+        "id3tag", ctx.source("id3tag", ctx.package.dependencies["id3tag"]), {"ZLIB_ROOT": str(ctx.prefix)}, install=True
+    )
+    ctx.cmake(
         "sndfile",
+        ctx.source("sndfile", ctx.package.dependencies["sndfile"]),
         {
             "CMAKE_POLICY_VERSION_MINIMUM": "3.5",
             "BUILD_PROGRAMS": False,
@@ -83,6 +70,7 @@ def build(ctx: BuildContext) -> None:
             "ENABLE_EXTERNAL_LIBS": False,
             "ENABLE_MPEG": False,
         },
+        install=True,
     )
     ctx.autotools("wavpack", ctx.source("wavpack", ctx.package.dependencies["wavpack"]))
 
@@ -162,7 +150,9 @@ def discover_update(ctx: UpdateContext) -> dict[str, Any]:
     ctx.data["dependencies"] = {name: latest_tag(pin) for name, pin in ctx.data["dependencies"].items()}
     if ctx.pins_changed:
         base = source["tag"].removeprefix("sox_ng-")
-        ctx.data["version"] = base if source != ctx.original["source"] else f"{base}.r{ctx.original['version_code'] + 1}"
+        ctx.data["version"] = (
+            base if source != ctx.original["source"] else f"{base}.r{ctx.original['version_code'] + 1}"
+        )
     return ctx.data
 
 

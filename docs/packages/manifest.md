@@ -44,13 +44,14 @@ not create a new publishable identity. See [version identity](../architecture/re
 
 ## Source and dependency pins
 
-`[source]` and each `[dependencies.<name>]` use the same fields. All three are required.
+`[source]` and each `[dependencies.<name>]` use the same fields. The first three are required.
 
 | Field | Type | Constraint |
 | --- | --- | --- |
 | `repository` | String | Starts with `https://`. |
 | `tag` | String | Starts with a letter or digit. Remaining characters can also include `.`, `_`, `/`, and `-`. |
 | `commit` | String | Exactly 40 lowercase hexadecimal characters. |
+| `recursive` | Boolean | Optional, defaults to `false`. Initialize nested Git submodules and collect their top-level notices. |
 
 ```toml
 [source]

@@ -55,12 +55,23 @@ class BuildContext:
         path = self.work / self.tier / "sources" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         run(["git", "init", path])
-        run(["git", "-C", path, "fetch", "--depth=1", pin.repository, pin.commit])
+        run(["git", "-C", path, "remote", "add", "origin", pin.repository])
+        run(["git", "-C", path, "fetch", "--depth=1", "origin", pin.commit])
         run(["git", "-C", path, "checkout", "--detach", "FETCH_HEAD"])
         if run(["git", "-C", path, "rev-parse", "HEAD"], capture=True).stdout.strip() != pin.commit:
             raise ValueError(f"Source revision mismatch: {name}")
+        if pin.recursive:
+            run(["git", "-C", path, "submodule", "sync", "--recursive"])
+            run(["git", "-C", path, "submodule", "update", "--init", "--recursive"])
         run(["git", "-C", path, "tag", pin.tag, pin.commit])
         self.notices(path, name)
+        if pin.recursive:
+            submodules = run(
+                ["git", "-C", path, "submodule", "foreach", "--recursive", "--quiet", 'printf "%s\\0" "$displaypath"'],
+                capture=True,
+            ).stdout
+            for relative in filter(None, submodules.split("\0")):
+                self.notices(path / relative, str(Path(name) / relative))
         return path
 
     def notices(self, source: Path, name: str) -> None:
@@ -173,10 +184,18 @@ class BuildContext:
             raise ValueError("No imported asset configured")
         return download(asset.url, asset.sha256, self.cache)
 
-    def cmake(self, name: str, source: Path, definitions: dict[str, str | bool | int]) -> Path:
+    def cmake(
+        self, name: str, source: Path, definitions: dict[str, str | bool | int], *, install: bool = False
+    ) -> Path:
         env = self.environment()
         build = self.work / self.tier / name
-        options: dict[str, str | bool | int] = dict(definitions)
+        options: dict[str, str | bool | int] = {
+            "BUILD_SHARED_LIBS": False,
+            "CMAKE_BUILD_TYPE": "Release",
+            "CMAKE_INSTALL_LIBDIR": "lib",
+            "CMAKE_PREFIX_PATH": str(self.prefix),
+            **definitions,
+        }
         options.update(
             CMAKE_INSTALL_PREFIX=str(self.prefix),
             CMAKE_C_COMPILER=env["CC"],
@@ -197,6 +216,8 @@ class BuildContext:
         ]
         run(["cmake", "-S", source, "-B", build, "-G", "Ninja", *args], env=env)
         run(["cmake", "--build", build, "--parallel", self.jobs], env=env)
+        if install:
+            run(["cmake", "--install", build], env=env)
         return build
 
     def stage_binary(self, source: Path, executable: str) -> None:

@@ -128,20 +128,36 @@ def test_cpu_detection_and_os_gate(monkeypatch):
     monkeypatch.setattr("muxtools_binaries.testing.sys", SimpleNamespace(platform="linux"))
     monkeypatch.setattr("muxtools_binaries.testing.platform.system", lambda: "Linux")
     monkeypatch.setattr("muxtools_binaries.testing.Path.read_text", lambda _: "flags : avx avx2\n")
-    features, state = cpu_state()
-    assert supports("avx2", features, state)
-    assert not supports("avx512", features, state)
-    assert not supports("avx2", features - {"fma"}, state)
+    features = cpu_state()
+    assert supports("baseline", features)
+    assert not supports("baseline", features - {"popcnt"})
+    assert supports("avx2", features)
+    assert not supports("avx512", features)
+    assert not supports("avx2", features - {"fma"})
     monkeypatch.setattr("muxtools_binaries.testing.Path.read_text", lambda _: "flags : sse sse2\n")
-    assert not supports("avx2", *cpu_state())
+    assert not supports("avx2", cpu_state())
     flags.extend("avx512f avx512bw avx512cd avx512dq avx512vl avx512_vnni 3dnowprefetch".split())
+    monkeypatch.setattr("muxtools_binaries.testing.Path.read_text", lambda _: "flags : avx avx2\n")
+    assert not supports("avx512", cpu_state())
     enabled = Mock(return_value=6)
     monkeypatch.setattr("muxtools_binaries.testing.sys", SimpleNamespace(platform="win32"))
     monkeypatch.setattr("ctypes.WinDLL", lambda _: SimpleNamespace(GetEnabledXStateFeatures=enabled), raising=False)
-    assert not supports("avx512", *cpu_state())
+    assert not supports("avx512", cpu_state())
+    enabled.return_value = 0
+    assert not supports("avx2", cpu_state())
     enabled.return_value = 0xE6
-    assert supports("avx512", *cpu_state())
-    assert {"avx512vnni", "prfchw"} <= cpu_state()[0]
+    assert supports("avx512", cpu_state())
+    assert {"avx512vnni", "prfchw"} <= cpu_state()
+    flags.extend(
+        "aes pclmulqdq rdrnd rdseed adx sha_ni clflushopt clwb fsgsbase "
+        "avx512ifma avx512vbmi avx512vbmi2 avx512bitalg avx512vpopcntdq "
+        "gfni vaes vpclmulqdq rdpid wbnoinvd clzero mwaitx".split()
+    )
+    features = cpu_state()
+    assert supports("zn4", features)
+    assert not supports("zn4", features - {"mwaitx"})
+    enabled.return_value = 6
+    assert not supports("zn4", cpu_state())
 
 
 def test_shared_runtime_override(package, tmp_path):
