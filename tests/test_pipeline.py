@@ -155,7 +155,8 @@ def test_cpu_detection_and_os_gate(monkeypatch):
     )
     features = cpu_state()
     assert supports("zn4", features)
-    assert not supports("zn4", features - {"mwaitx"})
+    assert supports("zn4", features - {"fsgsbase", "wbnoinvd", "clzero", "mwaitx"})
+    assert not supports("zn4", features - {"rdpid"})
     enabled.return_value = 6
     assert not supports("zn4", cpu_state())
 
