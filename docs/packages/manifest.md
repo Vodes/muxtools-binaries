@@ -134,7 +134,7 @@ and the catalog. Windows metadata does not emit this runtime table.
 Each target has one asset. Its recipe selects files, preserves licenses, and
 stages runtime resources. AppImages need recipe-specific handling; declaring
 `format = "appimage"` does not create wrappers automatically.
-See `packages/ffmpeg/package.toml` and `packages/mkvtoolnix/recipe.py` for examples.
+See `packages/ffmpeg/package.toml` and `packages/x264/recipe.py` for examples.
 
 ## Executables
 
@@ -233,10 +233,10 @@ setting. Those helper-owned values override definitions from `build.cmake`.
 Other definition names pass through to CMake; schema validation does not catch
 misspelled upstream CMake variables.
 
-### FFmpeg and MKVToolNix
+### FFmpeg
 
-These import recipes have no `Options` model. Their build tables must be empty.
-Change their target assets to select inputs. Change `recipe.py` to alter extraction,
+This import recipe has no `Options` model. Its build tables must be empty.
+Change its target assets to select inputs. Change `recipe.py` to alter extraction,
 file selection, or wrappers.
 
 ## Recipe update options

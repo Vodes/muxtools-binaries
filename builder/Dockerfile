@@ -4,6 +4,7 @@ RUN dnf install -y \
       gcc gcc-c++ clang llvm llvm-devel lld binutils \
       cmake ninja-build meson autoconf automake libtool gettext-devel pkgconf-pkg-config \
       nasm yasm make patch perl ruby rubygem-rake bison flex gperf texinfo zstd \
+      docbook-style-xsl libxslt ImageMagick inkscape \
       mingw64-gcc mingw64-gcc-c++ mingw64-headers mingw64-crt \
       mingw64-winpthreads-static \
     && dnf clean all

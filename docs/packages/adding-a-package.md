@@ -19,9 +19,9 @@ and its declared targets automatically.
 | Method | Manifest type | Starting example |
 | --- | --- | --- |
 | Compile an Autotools project | `source-build` | `packages/flac/` or `packages/wavpack/` |
-| Compile with custom steps | `source-build` | `packages/x265/` |
+| Compile with custom steps | `source-build` | `packages/x265/` or `packages/mkvtoolnix/` |
 | Import a third-party build | `external-build` | `packages/ffmpeg/` |
-| Import an upstream release | `upstream-binary` | `packages/mkvtoolnix/` |
+| Import an upstream release | `upstream-binary` | `packages/x264/` |
 
 All methods need a recipe. The manifest selects the inputs and settings;
 the recipe supplies the build steps.

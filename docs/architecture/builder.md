@@ -42,9 +42,10 @@ The helpers normally link compiler runtimes statically. On Windows, the build
 also copies required GCC, libstdc++, and winpthread DLLs when they remain imported.
 All source-built Linux executables must satisfy glibc 2.34.
 
-x265 keeps libstdc++ static but uses system `libgcc_s`. The repository's static
-unwind library introduces `_dl_find_object@GLIBC_2.35`. The dynamic libgcc choice
-avoids that requirement without imposing a new libstdc++ on consumers.
+x265 and MKVToolNix keep libstdc++ static but use system `libgcc_s`. The
+repository's static unwind library introduces `_dl_find_object@GLIBC_2.35`. The
+dynamic libgcc choice avoids that requirement without imposing a new libstdc++
+on consumers.
 
 Autotools receives CPU flags through compiler arguments so configure can retain
 its optimization defaults. CMake receives target flags alongside upstream Release
@@ -73,8 +74,4 @@ and toolchain implementation. A new target table alone is not sufficient.
 Imported binaries retain their upstream ABI requirements. Declare any exceptions
 in the [runtime table](../packages/manifest.md#runtime-table).
 
-FFmpeg requires system `libgcc_s.so.1`. MKVToolNix's Linux AppImage requires
-Bash, FUSE 2, and zlib. Its wrappers use Bash to select the requested command-line
-tool inside the AppImage. They work independently of the caller's working directory.
-
-On Ubuntu 24.04, install `libfuse2t64` before testing MKVToolNix.
+FFmpeg requires system `libgcc_s.so.1`.

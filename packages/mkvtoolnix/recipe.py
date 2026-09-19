@@ -1,72 +1,397 @@
 import re
-import shutil
+import shlex
+import subprocess
+from pathlib import Path
 from typing import Any
 
 from packaging.version import Version
+from pydantic import Field
 
 from muxtools_binaries.build import BuildContext
-from muxtools_binaries.checks import CheckSuite, default_checks
-from muxtools_binaries.io import extract
-from muxtools_binaries.models import Package
+from muxtools_binaries.checks import AudioCheck, CheckSuite, default_checks
+from muxtools_binaries.io import download, extract, run
+from muxtools_binaries.models import Model, Package
+from muxtools_binaries.recipes import recipe_options
 from muxtools_binaries.updates import UpdateContext
+
+TRIPLE = "x86_64-w64-mingw32"
+
+
+class Options(Model):
+    gmp_url: str = Field(pattern=r"^https://")
+    gmp_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    iconv_url: str = Field(pattern=r"^https://")
+    iconv_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+_QT_OPTIONS = [
+    "-release",
+    "-static",
+    "-opensource",
+    "-confirm-license",
+    "-nomake",
+    "examples",
+    "-nomake",
+    "tests",
+    "-no-gui",
+    "-no-widgets",
+    "-no-feature-network",
+    "-no-feature-concurrent",
+    "-no-feature-sql",
+    "-no-feature-testlib",
+    "-no-feature-xml",
+    "-no-dbus",
+    "-no-opengl",
+    "-no-openssl",
+    "-no-glib",
+    "-no-icu",
+    "-qt-zlib",
+    "-qt-pcre",
+    "-qt-doubleconversion",
+]
+
+
+def _static_zlib(ctx: BuildContext, source: Path) -> None:
+    env = ctx.environment()
+    run([source / "configure", f"--prefix={ctx.prefix}", "--static"], cwd=source, env=env)
+    run(["make", f"-j{ctx.jobs}"], cwd=source, env=env)
+    run(["make", "install"], cwd=source, env=env)
+
+
+def _static_gmp(ctx: BuildContext, options: Options) -> None:
+    archive = download(options.gmp_url, options.gmp_sha256, ctx.cache)
+    extracted = ctx.work / ctx.tier / "sources" / "gmp-archive"
+    extract(archive, extracted, "tar.xz")
+    sources = [path for path in extracted.iterdir() if path.is_dir()]
+    if len(sources) != 1:
+        raise ValueError("Expected one GMP source directory")
+    source = sources[0]
+    ctx.notices(source, "gmp")
+    build = ctx.work / ctx.tier / "gmp"
+    build.mkdir(parents=True, exist_ok=True)
+    env = ctx.environment()
+    configure: list[str | Path] = [
+        source / "configure",
+        f"--prefix={ctx.prefix}",
+        "--disable-shared",
+        "--enable-static",
+        "--enable-cxx",
+    ]
+    if ctx.windows:
+        configure.append(f"--host={TRIPLE}")
+    run(configure, cwd=build, env=env)
+    run(["make", f"-j{ctx.jobs}"], cwd=build, env=env)
+    run(["make", "install"], cwd=build, env=env)
+
+
+def _static_iconv(ctx: BuildContext, options: Options) -> None:
+    archive = download(options.iconv_url, options.iconv_sha256, ctx.cache)
+    extracted = ctx.work / ctx.tier / "sources" / "iconv-archive"
+    extract(archive, extracted, "tar.gz")
+    sources = [path for path in extracted.iterdir() if path.is_dir()]
+    if len(sources) != 1:
+        raise ValueError("Expected one libiconv source directory")
+    source = sources[0]
+    ctx.notices(source, "libiconv")
+    ctx.autotools("iconv", source, ["--disable-nls"])
+
+
+def _static_zstd(ctx: BuildContext, source: Path) -> None:
+    ctx.cmake(
+        "zstd",
+        source / "build" / "cmake",
+        {
+            "ZSTD_BUILD_PROGRAMS": False,
+            "ZSTD_BUILD_SHARED": False,
+            "ZSTD_BUILD_STATIC": True,
+            "ZSTD_BUILD_TESTS": False,
+        },
+        install=True,
+    )
+
+
+def _build_boost(ctx: BuildContext, source: Path) -> None:
+    target_env = ctx.environment()
+    build_env = _native_environment(ctx)
+    if ctx.windows:
+        (source / "user-config.jam").write_text(f"using gcc : mingw : {TRIPLE}-g++ ;\n")
+    run([source / "bootstrap.sh", "--with-libraries=filesystem,system"], cwd=source, env=build_env)
+    b2 = source / "b2"
+    options: list[str | Path] = [
+        b2,
+        f"-j{ctx.jobs}",
+        "--with-filesystem",
+        "--with-system",
+        "variant=release",
+        "link=static",
+        "runtime-link=static",
+        "threading=multi",
+        "architecture=x86",
+        "address-model=64",
+        f"cxxflags={target_env['CXXFLAGS']}",
+        f"linkflags={target_env['LDFLAGS']}",
+        f"--prefix={ctx.prefix}",
+        "install",
+    ]
+    if ctx.windows:
+        options.extend(
+            [
+                "toolset=gcc-mingw",
+                "target-os=windows",
+                f"--user-config={source / 'user-config.jam'}",
+            ]
+        )
+    run(options, cwd=source, env=build_env)
+
+
+def _native_environment(ctx: BuildContext) -> dict[str, str]:
+    if not ctx.windows:
+        return ctx.environment()
+    env = ctx.environment()
+    flags = ["-march=x86-64-v2"]
+    env.update(
+        CC="gcc",
+        CXX="g++",
+        AR="gcc-ar",
+        RANLIB="gcc-ranlib",
+        NM="gcc-nm",
+        CFLAGS=shlex.join(flags),
+        CXXFLAGS=shlex.join(flags),
+        LDFLAGS=shlex.join([*flags, "-static-libstdc++", "-static-libgcc"]),
+        CPPFLAGS="",
+        PKG_CONFIG_LIBDIR="",
+        PKG_CONFIG_PATH="",
+    )
+    return env
+
+
+def _build_qt(ctx: BuildContext, source: Path) -> Path:
+    target_env = ctx.environment()
+    host_prefix = ctx.work / ctx.tier / "qt-host-prefix"
+    if ctx.windows:
+        host_build = ctx.work / ctx.tier / "qt-host"
+        host_build.mkdir(parents=True, exist_ok=True)
+        host_env = _native_environment(ctx)
+        run(
+            [source / "configure", *_QT_OPTIONS, "-prefix", host_prefix],
+            cwd=host_build,
+            env=host_env,
+        )
+        run(["cmake", "--build", host_build, "--parallel", ctx.jobs], env=host_env)
+        run(["cmake", "--install", host_build], env=host_env)
+
+    target_build = ctx.work / ctx.tier / "qtbase"
+    target_build.mkdir(parents=True, exist_ok=True)
+    options: list[str | Path] = [*(_QT_OPTIONS), "-prefix", ctx.prefix]
+    if ctx.windows:
+        toolchain = ctx.work / ctx.tier / "qt-mingw-toolchain.cmake"
+        toolchain.write_text(
+            "set(CMAKE_SYSTEM_NAME Windows)\n"
+            'set(CMAKE_SYSTEM_PROCESSOR "x86_64")\n'
+            f'set(CMAKE_C_COMPILER "{TRIPLE}-gcc")\n'
+            f'set(CMAKE_CXX_COMPILER "{TRIPLE}-g++")\n'
+            f'set(CMAKE_RC_COMPILER "{TRIPLE}-windres")\n'
+            f'set(CMAKE_AR "{TRIPLE}-gcc-ar")\n'
+            f'set(CMAKE_RANLIB "{TRIPLE}-gcc-ranlib")\n'
+            "set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)\n"
+            "set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)\n"
+            "set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)\n"
+            "set(CMAKE_FIND_ROOT_PATH_MODE_PACKAGE ONLY)\n"
+        )
+        options += [
+            "-xplatform",
+            "win32-g++",
+            "-device-option",
+            f"CROSS_COMPILE={TRIPLE}-",
+            "-qt-host-path",
+            host_prefix,
+            "--",
+            f"-DCMAKE_TOOLCHAIN_FILE={toolchain}",
+        ]
+    run([source / "configure", *options], cwd=target_build, env=target_env)
+    run(["cmake", "--build", target_build, "--parallel", ctx.jobs], env=target_env)
+    run(["cmake", "--install", target_build], env=target_env)
+    return ctx.prefix / "bin" / "qmake6"
+
+
+def _verify_configuration(summary: str, build_config: str = "", *, windows: bool = False) -> None:
+    if build_config:
+        required = {
+            "GUI": r"^BUILD_GUI\s*=\s*no\b",
+            "FMT": r"^FMT_INTERNAL\s*=\s*(?:yes|1)\b",
+            "EBML/Matroska": r"^EBML_MATROSKA_INTERNAL\s*=\s*(?:yes|1)\b",
+            "pugixml": r"^PUGIXML_INTERNAL\s*=\s*(?:yes|1)\b",
+            "nlohmann-json": r"^NLOHMANN_JSON_INTERNAL\s*=\s*(?:yes|1)\b",
+            "utf8-cpp": r"^UTF8CPP_INTERNAL\s*=\s*(?:yes|1)\b",
+            "FLAC": r"^FLAC_LIBS\s*=\s*.+",
+            "Qt": r"^QT_LIBS_NON_GUI\s*=\s*.+",
+            "DVD read": r"^USE_DVDREAD\s*=\s*(?!yes\b).*$",
+        }
+        if windows:
+            required["iconv"] = r"^ICONV_LIBS\s*=\s*.+"
+        missing = [name for name, pattern in required.items() if not re.search(pattern, build_config, re.MULTILINE)]
+        if missing:
+            raise ValueError(f"MKVToolNix build-config is missing: {', '.join(missing)}")
+    if not summary:
+        raise ValueError("MKVToolNix configure produced no feature summary")
+    marker = "Optional features that are NOT built:"
+    disabled = summary.partition(marker)
+    if not disabled[1]:
+        raise ValueError("MKVToolNix configure summary has no disabled-feature section")
+    if "FLAC audio" not in disabled[0]:
+        raise ValueError("MKVToolNix configure summary is missing: FLAC")
+    required = {
+        "GUI": "MKVToolNix GUI",
+        "DBus": "DBus support",
+        "DVD read": "DVD chapter support via libdvdread",
+    }
+    missing = [name for name, feature in required.items() if feature not in disabled[2]]
+    if missing:
+        raise ValueError(f"MKVToolNix configure summary is missing: {', '.join(missing)}")
+
+
+def _use_static_libstdcpp(source: Path) -> None:
+    rakefile = source / "Rakefile"
+    contents = rakefile.read_text()
+    marker = '  "-lstdc++",\n'
+    if contents.count(marker) != 1:
+        raise ValueError("Cannot locate MKVToolNix's explicit libstdc++ link argument")
+    rakefile.write_text(
+        contents.replace(
+            marker,
+            '  "-Wl,-Bstatic",\n  "-lstdc++",\n  "-Wl,-Bdynamic",\n',
+        )
+    )
+
+
+def _build_mkvtoolnix(ctx: BuildContext, source: Path, qmake: Path) -> None:
+    if not ctx.windows:
+        _use_static_libstdcpp(source)
+    env = ctx.environment()
+    env.update(
+        ac_cv_fmt="no",
+        ac_cv_header_pugixml_hpp="no",
+        ac_cv_nlohmann_jsoncpp="no",
+        ac_cv_header_utf8_h="no",
+        PKG_CONFIG="pkg-config --static",
+    )
+    run([source / "autogen.sh"], cwd=source, env=dict(env, NOCONFIGURE="1"))
+    options: list[str | Path] = [
+        source / "configure",
+        f"--prefix={ctx.prefix}",
+        "--disable-gui",
+        "--disable-dbus",
+        "--without-dvdread",
+        "--without-gettext",
+        f"--with-qmake6={qmake}",
+        f"--with-boost={ctx.prefix}",
+        f"--with-boost-libdir={ctx.prefix / 'lib'}",
+        f"--with-extra-includes={ctx.prefix / 'include'}",
+        f"--with-extra-libs={ctx.prefix / 'lib'}",
+    ]
+    if ctx.windows:
+        options.append(f"--host={TRIPLE}")
+    result = run(options, cwd=source, env=env, capture=True)
+    summary = getattr(result, "stdout", "")
+    if summary:
+        print(summary, end="")
+    build_config = (source / "build-config").read_text() if (source / "build-config").is_file() else ""
+    _verify_configuration(summary, build_config, windows=ctx.windows)
+    run(["rake", f"-j{ctx.jobs}", "apps:cli"], cwd=source, env=env)
+    run(["rake", "install:programs"], cwd=source, env=env)
 
 
 def build(ctx: BuildContext) -> None:
-    if ctx.config.asset is None:
-        raise ValueError("MKVToolNix requires an imported asset")
-    asset = ctx.asset()
-    if ctx.config.asset.format == "appimage":
-        destination = ctx.stage / "MKVToolNix.AppImage"
-        shutil.copy2(asset, destination)
-        destination.chmod(0o755)
-        for name in ctx.package.executables:
-            wrapper = ctx.stage / name
-            wrapper.write_text(
-                '#!/bin/sh\nset -eu\nbase=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)\n'
-                + 'exec bash -c \'exec -a "$0" "$@"\' '
-                + name
-                + ' "$base/MKVToolNix.AppImage" "$@"\n'
-            )
-            wrapper.chmod(0o755)
-        return
-    unpacked = ctx.work / "import"
-    extract(asset, unpacked, ctx.config.asset.format)
-    matches = list(unpacked.rglob("mkvmerge.exe"))
-    if len(matches) != 1:
-        raise ValueError("Expected exactly one MKVToolNix installation")
-    shutil.copytree(matches[0].parent, ctx.stage, dirs_exist_ok=True)
-    for name in ctx.package.executables:
-        (ctx.stage / (name + ".exe")).chmod(0o755)
+    options = recipe_options(ctx.package, ctx.target, Options)
+    ctx.tier = "baseline"
+    dependencies = ctx.package.dependencies
+    _static_zlib(ctx, ctx.source("zlib", dependencies["zlib"]))
+    _static_zstd(ctx, ctx.source("zstd", dependencies["zstd"]))
+    if ctx.windows:
+        _static_iconv(ctx, options)
+    ctx.autotools("ogg", ctx.source("ogg", dependencies["ogg"]))
+    ctx.autotools("vorbis", ctx.source("vorbis", dependencies["vorbis"]))
+    ctx.autotools("flac", ctx.source("flac", dependencies["flac"]), ["--disable-doxygen-docs", "--disable-cpplibs"])
+    _static_gmp(ctx, options)
+    _build_boost(ctx, ctx.source("boost", dependencies["boost"]))
+    qmake = _build_qt(ctx, ctx.source("qtbase", dependencies["qtbase"]))
+    if ctx.package.source is None:
+        raise ValueError("MKVToolNix requires a source pin")
+    source = ctx.source(ctx.package.name, ctx.package.source)
+    _build_mkvtoolnix(ctx, source, qmake)
+    ctx.stage_binaries()
 
 
 def checks(package: Package, target: str) -> CheckSuite:
     suite = default_checks(package)
     for name, check in suite.smoke.items():
         check.stdout_prefix = name + " v"
-    if target.startswith("linux"):
-        suite.files = {name: "script" for name in package.executables}
-        suite.files["MKVToolNix.AppImage"] = "elf"
+    suite.functional = [
+        AudioCheck(
+            command="mkvmerge",
+            source="flac",
+            suffix="mka",
+            args=["-o", "{output}", "{source}"],
+            lossless=True,
+        )
+    ]
+    suite.forbidden_libraries = (
+        [
+            "libQt6Core.so*",
+            "libFLAC.so*",
+            "libogg.so*",
+            "libvorbis.so*",
+            "libboost_filesystem.so*",
+            "libgmp.so*",
+            "libz.so*",
+            "libzstd.so*",
+            "libstdc++.so*",
+        ]
+        if target.startswith("linux")
+        else [
+            "Qt6Core.dll",
+            "libFLAC*.dll",
+            "libogg*.dll",
+            "libvorbis*.dll",
+            "libboost*.dll",
+            "libgmp*.dll",
+            "gmp*.dll",
+            "libiconv*.dll",
+            "zlib*.dll",
+            "libz*.dll",
+            "libzstd*.dll",
+            "libstdc++-6.dll",
+            "libgcc*.dll",
+            "libwinpthread*.dll",
+        ]
+    )
     return suite
 
 
+def _latest_release(source: dict[str, Any]) -> dict[str, Any]:
+    result = subprocess.run(
+        ["git", "ls-remote", "--tags", source["repository"]], check=True, text=True, capture_output=True
+    )
+    refs = dict(line.split()[::-1] for line in result.stdout.splitlines())
+    candidates = []
+    for ref, commit in refs.items():
+        match = re.fullmatch(r"refs/tags/(release-(\d+(?:\.\d+)+))", ref)
+        if match:
+            candidates.append((Version(match[2]), match[1], refs.get(ref + "^{}", commit)))
+    if not candidates:
+        raise ValueError(f"No MKVToolNix release tags in {source['repository']}")
+    version, tag, commit = max(candidates)
+    current = Version(source["tag"].removeprefix("release-"))
+    if version <= current:
+        return source
+    return dict(source, tag=tag, commit=commit)
+
+
 def discover_update(ctx: UpdateContext) -> dict[str, Any]:
-    data, updated = ctx.original, ctx.data
-    entries = ctx.get_json("https://mkvtoolnix.download/windows/releases/")
-    versions = [
-        Version(entry["name"].rstrip("/")) for entry in entries if re.fullmatch(r"\d+\.\d+(?:\.\d+)?/", entry["name"])
-    ]
-    version = str(max(versions))
-    if Version(version) <= Version(data["version"]):
-        return data
-    for target, config in updated["targets"].items():
-        url = (
-            f"https://mkvtoolnix.download/appimage/MKVToolNix_GUI-{version}-x86_64.AppImage"
-            if target.startswith("linux")
-            else f"https://mkvtoolnix.download/windows/releases/{version}/mkvtoolnix-64-bit-{version}.zip"
-        )
-        config["asset"].update(url=url, sha256=ctx.remote_hash(url))
-    updated["version"] = version
-    return updated
+    ctx.data["source"] = _latest_release(ctx.data["source"])
+    if ctx.data["source"] != ctx.original["source"]:
+        ctx.data["version"] = ctx.data["source"]["tag"].removeprefix("release-")
+    return ctx.data
 
 
-__all__ = ["build", "checks", "discover_update"]
+__all__ = ["Options", "build", "checks", "discover_update"]

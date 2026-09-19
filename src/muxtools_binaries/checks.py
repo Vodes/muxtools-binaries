@@ -23,6 +23,7 @@ class AudioCheck(Model):
     suffix: str = Field(pattern=r"^[a-zA-Z0-9]+$")
     args: list[str]
     lossless: bool = False
+    source: Literal["wav", "flac"] = "wav"
 
 
 class VideoCheck(Model):
@@ -40,6 +41,7 @@ class CheckSuite(Model):
     functional: list[Annotated[AudioCheck | VideoCheck, Field(discriminator="kind")]] = Field(default_factory=list)
     # Explicit paths include wrappers and private executable resources.
     files: dict[str, Literal["elf", "pe", "script"]] = Field(default_factory=dict)
+    forbidden_libraries: list[str] = Field(default_factory=list)
 
     def validate_binaries(self, binaries: dict[str, dict[str, str]]) -> None:
         if set(self.smoke) != set(binaries):
@@ -66,7 +68,9 @@ def default_checks(package: Package, target: str = "") -> CheckSuite:
 
 def archive_checks(data: dict[str, Any]) -> CheckSuite:
     if data.get("schema_version") != 2:
-        raise ValueError("This archive has no embedded checks; rebuild it and test with the matching repository checkout")
+        raise ValueError(
+            "This archive has no embedded checks; rebuild it and test with the matching repository checkout"
+        )
     suite = CheckSuite.model_validate(data.get("checks"))
     suite.validate_binaries(data["binaries"])
     if {name: check.args for name, check in suite.smoke.items()} != data["smoke"]:

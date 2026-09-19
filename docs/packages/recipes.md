@@ -92,7 +92,7 @@ The command must refer to a declared logical executable.
 
 | Check | Additional fields | Input and result |
 | --- | --- | --- |
-| `AudioCheck` | `lossless=False` | Encode the audio fixture; decode and compare the result. The flag labels the mode; it does not change the quality threshold. |
+| `AudioCheck` | `lossless=False`, `source="wav"` | Encode or mux the selected WAV or FLAC fixture; decode and compare the result. The flag labels the mode; it does not change the quality threshold. |
 | `VideoCheck` | `width=64`, `height=64`, `bit_depth=8` | Encode one generated YUV420 frame; require nonempty output. |
 
 Video dimensions must be positive, even, and at most 4096. Bit depth must be
@@ -109,13 +109,17 @@ directory for every eligible executable variant.
 Use it for wrappers and private executable resources. For example:
 
 ```python
-suite.files = {name: "script" for name in package.executables}
-suite.files["MKVToolNix.AppImage"] = "elf"
+suite.files["launcher"] = "script"
+suite.files["private/tool"] = "elf"
 ```
 
 Each declared file must exist. Undeclared executable files must match the target's
 native format. Native library and ELF checks still apply to bundled native files.
 Paths must be portable, relative, and free of parent-directory traversal.
+
+`CheckSuite.forbidden_libraries` accepts case-insensitive shell patterns for
+ELF or PE imports that must not remain dynamic. This supports package-specific
+audits for dependencies that a recipe intends to link statically.
 
 See [Checks and tests](../architecture/testing.md) for execution behavior.
 

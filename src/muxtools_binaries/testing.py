@@ -5,6 +5,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+from fnmatch import fnmatchcase
 from pathlib import Path
 from typing import Any, Literal
 
@@ -118,6 +119,12 @@ def binary_format(path: Path) -> Literal["elf", "pe", "script"]:
 def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = None) -> None:
     expected = "pe" if data["target"].startswith("windows") else "elf"
     files = suite.files if suite else {}
+    forbidden = [pattern.casefold() for pattern in suite.forbidden_libraries] if suite else []
+
+    def check_library(library: str, executable: Path) -> None:
+        if any(fnmatchcase(library.casefold(), pattern) for pattern in forbidden):
+            raise ValueError(f"Forbidden runtime dependency: {library} in {executable.name}")
+
     for variants in data["binaries"].values():
         for filename in variants.values():
             kind = binary_format(stage / filename)
@@ -155,6 +162,7 @@ def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = Non
             if versions and max(versions) > minimum:
                 raise ValueError(f"{path.name} needs glibc {max(versions)}, configured minimum is {minimum}")
             for library in re.findall(r"Shared library: \[(.*?)\]", details):
+                check_library(library, path)
                 if library not in allowed and not list(stage.rglob(library)):
                     raise ValueError(f"Unbundled runtime dependency: {library} in {path.name}")
             if re.search(r"\((?:RUNPATH|RPATH)\).*\[(?:/(?:tmp|opt|work)|.*?/build/)", details):
@@ -163,6 +171,7 @@ def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = Non
             binary_format(path)
             details = run(["objdump", "-p", path], capture=True).stdout
             for library in re.findall(r"DLL Name: (\S+)", details):
+                check_library(library, path)
                 if library.lower().startswith(("libgcc", "libstdc++", "libwinpthread")):
                     if not any(p.name.lower() == library.lower() for p in stage.rglob("*.dll")):
                         raise ValueError(f"Unbundled compiler runtime: {library}")
@@ -176,7 +185,12 @@ def exercise(
         work.mkdir()
         variants = data["binaries"][check.command]
         if isinstance(check, AudioCheck):
-            exercise_audio(stage, check, variants, work, tiers, audio_source)
+            source = (
+                audio_source
+                if check.source == "wav"
+                else audio_source.with_name(f"{check.source}_source.{check.source}")
+            )
+            exercise_audio(stage, check, variants, work, tiers, source)
             continue
         source = work / "input.yuv"
         source.write_bytes(bytes(check.width * check.height * 3 // 2 * (1 if check.bit_depth == 8 else 2)))
