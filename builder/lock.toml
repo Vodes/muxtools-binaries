@@ -2,9 +2,9 @@ schema_version = 2
 
 [builders.manylinux-x86_64]
 base = "quay.io/pypa/manylinux_2_34_x86_64@sha256:934419fa742ff922855f464203cc0ad5afe3317a8541712a00cf3dc7fb893fc8"
-image = "ghcr.io/vodes/muxtools-builder@sha256:def68655356bba534f8688e46d463bd301e5dcb7e9023dfe35661f6da95f6bf0"
+image = "ghcr.io/vodes/muxtools-builder@sha256:56c55d1c0967bc7fdd9bb0111d66e18980066cfc8b547ba7921ddb5417e3113e"
 
 [builders.manylinux-arm64]
 base = "quay.io/pypa/manylinux_2_34_aarch64@sha256:db1a485b015c1d9a6d7e2929367a69a6f772964be06cca8fe585f959a47ec0b7"
 # Filled after the native ARM64 builder has passed qualification.
-image = ""
+image = "ghcr.io/vodes/muxtools-builder@sha256:1ccb8969bd11eac5929ee3862e8139a81c5fa86ef30cc4b0eec6a5b8f5df38a2"
