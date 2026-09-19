@@ -68,6 +68,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: astral-sh/setup-uv@v10.0.1
+      - name: Restore source archives
+        uses: actions/cache@v5
+        with:
+          path: build/downloads
+          key: source-archives-${{ matrix.package }}-${{ matrix.target }}-${{ hashFiles('packages/**/package.toml') }}
+          restore-keys: source-archives-${{ matrix.package }}-${{ matrix.target }}-
       - name: Resolve builder
         id: builder
         env:

@@ -56,11 +56,22 @@ def download(url: str, digest: str, cache: Path) -> Path:
         return path
     temporary = path.with_suffix(f".{os.getpid()}.part")
     try:
-        with httpx2.stream("GET", url, follow_redirects=True, timeout=httpx2.Timeout(120, connect=30)) as response:
-            response.raise_for_status()
-            with temporary.open("wb") as output:
-                for chunk in response.iter_bytes(1024 * 1024):
-                    output.write(chunk)
+        for attempt in range(1, 4):
+            print(f"+ download {url} (attempt {attempt}/3)", flush=True)
+            try:
+                with httpx2.stream(
+                    "GET", url, follow_redirects=True, timeout=httpx2.Timeout(120, connect=30)
+                ) as response:
+                    response.raise_for_status()
+                    with temporary.open("wb") as output:
+                        for chunk in response.iter_bytes(1024 * 1024):
+                            output.write(chunk)
+                break
+            except httpx2.TransportError:
+                temporary.unlink(missing_ok=True)
+                if attempt == 3:
+                    raise
+                time.sleep(attempt)
         if sha256(temporary) != digest:
             raise ValueError(f"SHA-256 mismatch for {url}")
         temporary.replace(path)

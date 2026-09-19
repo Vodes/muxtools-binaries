@@ -1,17 +1,20 @@
+import hashlib
 import io
 import os
 import struct
 import tarfile
 import time
 import zipfile
+from contextlib import nullcontext
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import httpx2
 import pytest
 
 from muxtools_binaries.artifacts import metadata, pack, read_metadata, validate_layout
 from muxtools_binaries.build import BuildContext
-from muxtools_binaries.io import extract, sha256
+from muxtools_binaries.io import download, extract, sha256
 from muxtools_binaries.models import Package
 from muxtools_binaries.testing import binary_format, cpu_state, supports
 
@@ -27,6 +30,19 @@ def test_unsafe_archive(tmp_path, linked):
     with pytest.raises(ValueError):
         extract(archive, tmp_path / "out", "tar")
     assert not (tmp_path / "escape").exists()
+
+
+def test_download_retries_transport_errors(tmp_path, monkeypatch):
+    content = b"verified download"
+    digest = hashlib.sha256(content).hexdigest()
+    response = Mock()
+    response.iter_bytes.return_value = [content]
+    stream = Mock(side_effect=[httpx2.ConnectTimeout("temporary failure"), nullcontext(response)])
+    monkeypatch.setattr("muxtools_binaries.io.httpx2.stream", stream)
+    monkeypatch.setattr("muxtools_binaries.io.time.sleep", lambda _: None)
+
+    assert download("https://example.test/source.tar.xz", digest, tmp_path).read_bytes() == content
+    assert stream.call_count == 2
 
 
 def test_arm64_elf_target_detection(tmp_path):
