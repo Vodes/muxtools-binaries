@@ -1,11 +1,12 @@
 # Builder and toolchains
 
-Source builds run in one Linux image. Windows builds cross-compile through MinGW.
-Linux CI hosts do not set the binary ABI baseline; compilation stays in the builder.
+Source builds run in architecture-specific Linux images. Windows x86-64 builds
+cross-compile through MinGW. Linux CI hosts do not set the binary ABI baseline;
+compilation stays in the builder.
 
 ## Image identity
 
-`builder/Dockerfile` extends a digest-pinned manylinux_2_34 x86-64 image.
+`builder/Dockerfile` extends a digest-pinned manylinux_2_34 x86-64 or ARM64 image.
 It installs compilers and utilities from AlmaLinux 9 repositories, including CRB
 and EPEL.
 
@@ -17,20 +18,20 @@ its RPM inventory in `/opt/builder/packages.txt`.
 
 | Field | Purpose |
 | --- | --- |
-| `schema_version` | Lock format marker, currently `1`. |
-| `base` | Digest-pinned manylinux base identity. Keep it aligned with the Dockerfile. |
-| `image` | Adopted derived image, in `registry/path@sha256:<digest>` form. |
+| `schema_version` | Lock format marker, currently `2`. |
+| `builders.<name>.base` | Digest-pinned manylinux base identity. |
+| `builders.<name>.image` | Adopted derived image, in `registry/path@sha256:<digest>` form. |
 
-The build command reads `image` unless `--image` overrides it. It does not use
-`base` to rewrite the Dockerfile. An empty `image` requires a local override;
-test CI can build a temporary image. Release builds require a registry digest.
+The target registry selects a builder entry. The build command reads its `image`
+unless `--image` overrides it. Test CI builds from `base` while an image is empty;
+release builds require an adopted registry digest.
 
 ## Qualify and adopt an image
 
-1. Run **Qualify builder** and inspect the Linux and native Windows results.
-2. Enable its publish checkbox on `main` to push the tested image to GHCR.
-3. Copy the resulting digest from the workflow summary into `builder/lock.toml`.
-4. Review and merge the lock change before using that image for releases.
+1. Run **Qualify builder** and inspect both native Linux architectures and Windows results.
+2. Enable its publish checkbox on `main` to push the tested images to GHCR.
+3. Copy each resulting digest into its builder entry in `builder/lock.toml`.
+4. Review and merge the lock change before using those images for releases.
 
 ## Compiler runtimes
 
@@ -64,6 +65,7 @@ These are almost entirely copied from Vapoursynth's new plugin cpu level guideli
 See the [Vapoursynth R75 Release Blogpost](https://www.vapoursynth.com/2026/04/30/r75-sanding-of-the-r74-edges-and-plugin-manifests/) for details and reasoning.
 
 Windows adds `.exe` after the CPU suffix.
+Linux ARM64 currently supports only `baseline`, compiled with `-march=armv8-a`.
 See [CPU eligibility](testing.md#cpu-eligibility) for the test runner's rules.
 
 To add an operating system or architecture, extend the explicit target registry

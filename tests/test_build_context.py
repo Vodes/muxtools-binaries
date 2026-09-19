@@ -1,8 +1,9 @@
 import subprocess
+import tarfile
 from pathlib import Path
 
 from muxtools_binaries.build import BuildContext
-from muxtools_binaries.models import Source
+from muxtools_binaries.models import ArchiveSource, Source
 
 
 def _git(directory: Path, *args: str) -> str:
@@ -45,6 +46,28 @@ def test_recursive_source_collects_nested_submodule_notices(package, tmp_path, m
     assert (stage / "licenses/example/NOTICE").read_text() == "license"
     assert (stage / "licenses/example/lib/child/LICENSE.txt").read_text() == "license"
     assert (stage / "licenses/example/lib/child/third_party/nested/COPYING").read_text() == "license"
+
+
+def test_archive_source_extracts_one_directory_and_collects_notices(package, tmp_path, monkeypatch):
+    source = tmp_path / "example-1.0"
+    source.mkdir()
+    (source / "LICENSE").write_text("license")
+    archive = tmp_path / "example.tar.gz"
+    with tarfile.open(archive, "w:gz") as output:
+        output.add(source, arcname=source.name)
+
+    stage = tmp_path / "stage"
+    stage.mkdir()
+    ctx = BuildContext(tmp_path, package, "linux-x86_64", tmp_path / "work", stage, 1)
+    pin = ArchiveSource(url="https://example.test/example.tar.gz", sha256="0" * 64, format="tar.gz")
+    downloads = []
+    monkeypatch.setattr("muxtools_binaries.build.download", lambda *args: downloads.append(args) or archive)
+
+    unpacked = ctx.source("example", pin)
+
+    assert unpacked.name == "example-1.0"
+    assert (stage / "licenses/example/LICENSE").read_text() == "license"
+    assert downloads == [(pin.url, pin.sha256, ctx.cache)]
 
 
 def test_cmake_defaults_overrides_and_install_environment(package, tmp_path, monkeypatch):

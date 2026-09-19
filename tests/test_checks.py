@@ -96,7 +96,7 @@ def test_structural_rejects_recipe_forbidden_library(tmp_path, monkeypatch):
         smoke={"example": CommandCheck()},
         forbidden_libraries=["Qt6Core.dll", "libFLAC*.dll"],
     )
-    monkeypatch.setattr("muxtools_binaries.testing.binary_format", lambda path: "pe")
+    monkeypatch.setattr("muxtools_binaries.testing.binary_format", lambda path, target=None: "pe")
     monkeypatch.setattr(
         "muxtools_binaries.testing.run",
         lambda *args, **kwargs: SimpleNamespace(stdout="DLL Name: Qt6Core.dll\n"),

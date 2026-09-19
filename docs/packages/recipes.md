@@ -18,7 +18,7 @@ Use `BuildContext` from `muxtools_binaries.build`. It supplies these attributes:
 | --- | --- |
 | `root` | Repository root. |
 | `package` | Validated package model. |
-| `target`, `config`, `windows` | Target name, target settings, and Windows flag. |
+| `target`, `target_info`, `config`, `toolchain` | Target name, registry data, manifest settings, and resolved toolchain. |
 | `work`, `stage` | Isolated work directory and final package staging directory. |
 | `jobs` | Parallel build limit. |
 | `tier` | Current CPU level. Starts as `baseline`; set it before each variant build. |
@@ -29,9 +29,10 @@ The main helpers are:
 
 | Method | Behavior |
 | --- | --- |
-| `source(name, pin)` | Fetch and verify the pinned commit, optionally initialize submodules, create its local version tag, and copy top-level notices from the source and initialized submodules. Returns the checkout path. |
-| `environment()` | Return compiler, linker, CPU, LTO, and private dependency settings for the current target and tier. |
-| `autotools(name, source, options=())` | Configure, build, and install into the private prefix. |
+| `source(name, pin)` | Fetch a verified Git or archive source and collect its notices. Returns the source directory. |
+| `build_environment()` | Return compiler, linker, CPU, LTO, and private dependency settings for the current target and tier. |
+| `host_environment()` | Return native builder settings for host tools needed during a cross build. |
+| `autotools(name, source, options=(), flags_in_compiler=True)` | Configure, build, and install into the private prefix. Disable compiler-embedded flags for projects that require ordinary `CFLAGS` and `CXXFLAGS`. |
 | `cmake(name, source, definitions, install=False)` | Configure with Ninja and build. Optionally install into the private prefix. Returns the build directory. |
 | `asset()` | Download the current target asset and verify SHA-256. Returns the cached file path. |
 | `stage_binary(source, executable)` | Copy a file to the standard name for that logical executable and current tier; set executable mode. |
@@ -105,7 +106,7 @@ directory for every eligible executable variant.
 
 ### Required file formats
 
-`CheckSuite.files` maps archive-relative paths to `elf`, `pe`, or `script`.
+`CheckSuite.files` maps archive-relative paths to `elf`, `pe`, `macho`, or `script`.
 Use it for wrappers and private executable resources. For example:
 
 ```python

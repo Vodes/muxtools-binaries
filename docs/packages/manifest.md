@@ -13,7 +13,7 @@ accepts them.
 ## Top-level fields
 
 Put scalar fields before the first TOML table header. Package manifests use
-schema 1; [archive metadata](../architecture/artifacts.md#metadata) uses schema 3.
+schema 1; [archive metadata](../architecture/artifacts.md#metadata) uses schema 4.
 
 | Field | Type | Required or default | Meaning and limits |
 | --- | --- | --- | --- |
@@ -44,7 +44,9 @@ not create a new publishable identity. See [version identity](../architecture/re
 
 ## Source and dependency pins
 
-`[source]` and each `[dependencies.<name>]` use the same fields. The first three are required.
+`[source]` and each `[dependencies.<name>]` can pin either Git or a release archive.
+
+Git pins use:
 
 | Field | Type | Constraint |
 | --- | --- | --- |
@@ -67,19 +69,22 @@ commit = "be05b13e98b048f0b5a0f5fa8ce514d56db5f822"
 
 The build fetches and verifies the commit, then creates the local tag for upstream
 version detection. The commit selects the source; the tag is not a floating build input.
+Archive pins use an HTTPS `url`, a lowercase hexadecimal `sha256`, and a `format`
+of `tar`, `tar.gz`, `tar.xz`, `tar.bz2`, `tar.zst`, `zip`, or `7z`. The archive
+must contain exactly one top-level source directory.
 Autotools dependencies build in manifest order into a private prefix for each
 target and CPU level. A custom recipe controls its own dependency steps.
 
 ## Target settings
 
-The registered target names are `linux-x86_64` and `windows-x86_64`. There is no
+The registered target names are `linux-x86_64`, `windows-x86_64`, and `linux-arm64`. There is no
 top-level target-default table. Declare each target separately.
 
 | Field in `[targets.<target>]` | Type | Default | Meaning and limits |
 | --- | --- | --- | --- |
-| `compiler` | String | `"gcc"` | `gcc` or `clang`. Used by source-build helpers. |
+| `toolchain` | String | `"gcc"` | Target-scoped toolchain, currently `gcc` or `clang`. |
 | `lto` | Boolean false or string | `false` | `false`, `"full"`, or `"thin"`. Thin LTO requires Clang. `true` is not accepted. |
-| `cpu_levels` | String array | `["baseline"]` | Unique entries, with `baseline` first. Other values: `avx2`, `avx512`, `zn4`. Imports must use only `baseline`. |
+| `cpu_levels` | String array | `["baseline"]` | Unique entries, with `baseline` first. x86-64 also supports `avx2`, `avx512`, and `zn4`; ARM64 is baseline-only. Imports must use only `baseline`. |
 | `extra_cflags` | String array | `[]` | Extra C compiler arguments. |
 | `extra_cxxflags` | String array | `[]` | Extra C++ compiler arguments. |
 | `extra_ldflags` | String array | `[]` | Extra linker arguments. |
@@ -93,7 +98,7 @@ do not rebuild an imported binary or change its ABI.
 
 ```toml
 [targets.linux-x86_64]
-compiler = "clang"
+toolchain = "clang"
 lto = "thin"
 cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
 extra_ldflags = ["-shared-libgcc", "-Wl,--strip-debug"]

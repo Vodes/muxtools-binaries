@@ -8,10 +8,11 @@ from pathlib import Path
 import httpx2
 
 from .artifacts import metadata, pack, read_metadata
-from .build import builder_image, produce
+from .build import builder_configuration, builder_image, produce
 from .io import run
 from .models import load_packages
 from .recipes import checks_for_archive, load_recipe, recipe_checks
+from .targets import BUILDERS, target_spec
 from .testing import structural, test_archive
 
 
@@ -26,6 +27,8 @@ def _parser() -> argparse.ArgumentParser:
     matrix = commands.add_parser("matrix")
     matrix.add_argument("--packages", default="")
     matrix.add_argument("--changed-from")
+    builder = commands.add_parser("builder")
+    builder.add_argument("--target", required=True)
     build = commands.add_parser("build")
     build.add_argument("package")
     build.add_argument("--target", required=True)
@@ -76,7 +79,9 @@ def _matrix(root: Path, names: str, changed_from: str | None) -> dict[str, list[
             {
                 "package": p.name,
                 "target": target,
-                "runner": "windows-2022" if target.startswith("windows") else "ubuntu-24.04",
+                "build_runner": target_spec(target).build_runner,
+                "smoke_runner": target_spec(target).smoke_runner,
+                "builder": target_spec(target).builder,
             }
             for p in packages.values()
             for target in p.targets
@@ -97,6 +102,7 @@ def _ignored_matrix_path(path: str) -> bool:
 
 
 def _build_in_container(root: Path, args: argparse.Namespace, image: str, revision: str) -> None:
+    target = target_spec(args.target)
     user: list[str] = []
     if sys.platform != "win32":
         user = ["--user", f"{os.getuid()}:{os.getgid()}"]
@@ -105,6 +111,8 @@ def _build_in_container(root: Path, args: argparse.Namespace, image: str, revisi
             "docker",
             "run",
             "--rm",
+            "--platform",
+            BUILDERS[target.builder].platform,
             *user,
             "-v",
             f"{root}:/work",
@@ -140,7 +148,7 @@ def _build(root: Path, args: argparse.Namespace) -> None:
     package = load_packages(root, [args.package])[args.package]
     if args.target not in package.targets:
         raise ValueError(f"Unsupported target for {package.name}: {args.target}")
-    image = builder_image(root, args.image, args.channel == "release")
+    image = builder_image(root, args.target, args.image, args.channel == "release")
     revision = args.revision or subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
     if not args.inside:
         _build_in_container(root, args, image, revision)
@@ -170,6 +178,8 @@ def main() -> int:
             print(pack(args.stage, data, args.output))
         elif args.command == "matrix":
             print(json.dumps(_matrix(root, args.packages, args.changed_from)))
+        elif args.command == "builder":
+            print(json.dumps(builder_configuration(root, args.target)))
         elif args.command == "build":
             _build(root, args)
         elif args.command == "test":

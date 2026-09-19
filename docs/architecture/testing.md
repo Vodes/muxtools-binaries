@@ -5,7 +5,7 @@ target operating system. Release publication requires matching native test repor
 
 ## Structural checks
 
-Build jobs check executable format, x86-64 architecture, metadata references,
+Build jobs check executable format, target architecture, metadata references,
 required files, ELF symbol versions, and missing runtime libraries.
 They reject unsafe paths and invalid archive layouts.
 
@@ -14,7 +14,8 @@ Declare wrappers and private executables in
 
 ## Native tests
 
-Linux jobs use Ubuntu 24.04; Windows jobs use Windows Server 2022.
+Linux x86-64 jobs use Ubuntu 24.04, Linux ARM64 jobs use Ubuntu 24.04 ARM,
+and Windows jobs use Windows Server 2022.
 The runner extracts each archive into a path that contains spaces. It invokes
 every baseline executable and runs the recipe's functional checks.
 

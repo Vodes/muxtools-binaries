@@ -33,6 +33,14 @@ def test_tag_order_and_annotated_commit(package, monkeypatch):
     assert latest_tag(source) == dict(source, tag="v1.10", commit="peeled")
 
 
+def test_tag_order_supports_release_prefix(package, monkeypatch):
+    source = package.source.model_dump()
+    source.update(tag="release-1.9")
+    refs = "old\trefs/tags/release-1.9\nnew\trefs/tags/release-1.10\n"
+    monkeypatch.setattr("muxtools_binaries.updates.subprocess.run", lambda *a, **kw: SimpleNamespace(stdout=refs))
+    assert latest_tag(source, prefix="release-") == dict(source, tag="release-1.10", commit="new")
+
+
 def test_noop_and_dependency_update(package, monkeypatch, recipe_root):
     data = package.model_dump()
     data["dependencies"] = {"dependency": dict(data["source"], repository="https://example.test/dependency")}

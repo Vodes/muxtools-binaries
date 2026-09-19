@@ -1,5 +1,6 @@
 import io
 import os
+import struct
 import tarfile
 import time
 import zipfile
@@ -12,7 +13,7 @@ from muxtools_binaries.artifacts import metadata, pack, read_metadata, validate_
 from muxtools_binaries.build import BuildContext
 from muxtools_binaries.io import extract, sha256
 from muxtools_binaries.models import Package
-from muxtools_binaries.testing import cpu_state, supports
+from muxtools_binaries.testing import binary_format, cpu_state, supports
 
 
 @pytest.mark.parametrize("linked", [False, True])
@@ -26,6 +27,45 @@ def test_unsafe_archive(tmp_path, linked):
     with pytest.raises(ValueError):
         extract(archive, tmp_path / "out", "tar")
     assert not (tmp_path / "escape").exists()
+
+
+def test_arm64_elf_target_detection(tmp_path):
+    executable = tmp_path / "example"
+    header = bytearray(64)
+    header[:6] = b"\x7fELF\x02\x01"
+    struct.pack_into("<H", header, 18, 183)
+    executable.write_bytes(header)
+
+    assert binary_format(executable, "linux-arm64") == "elf"
+    with pytest.raises(ValueError, match="Wrong target architecture"):
+        binary_format(executable, "linux-x86_64")
+
+
+def test_future_arm64_binary_formats_are_recognized(tmp_path):
+    pe = tmp_path / "example.exe"
+    pe_header = bytearray(70)
+    pe_header[:2] = b"MZ"
+    struct.pack_into("<I", pe_header, 60, 64)
+    pe_header[64:70] = b"PE\0\0d\xaa"
+    pe.write_bytes(pe_header)
+    assert binary_format(pe) == "pe"
+
+    macho = tmp_path / "example-macos"
+    macho.write_bytes(b"\xcf\xfa\xed\xfe" + struct.pack("<I", 0x0100000C))
+    assert binary_format(macho) == "macho"
+
+
+def test_arm64_target_accepts_only_registered_toolchains_and_cpu_levels(package):
+    definition = package.model_dump()
+    definition["targets"] = {"linux-arm64": {"toolchain": "gcc"}}
+    assert Package.model_validate(definition).targets["linux-arm64"].cpu_levels == ["baseline"]
+
+    definition["targets"]["linux-arm64"]["toolchain"] = "unknown"
+    with pytest.raises(ValueError, match="Unsupported toolchain"):
+        Package.model_validate(definition)
+    definition["targets"]["linux-arm64"] = {"toolchain": "gcc", "cpu_levels": ["baseline", "avx2"]}
+    with pytest.raises(ValueError, match="Unsupported CPU level"):
+        Package.model_validate(definition)
 
 
 def test_archive_roundtrip(tmp_path):
@@ -67,7 +107,9 @@ def test_optional_description_roundtrip(package, tmp_path, monkeypatch, descript
     with monkeypatch.context() as patch:
         patch.setattr("muxtools_binaries.artifacts.run", Mock(return_value=SimpleNamespace(stdout="compiler 1.0")))
         data = metadata(package, "linux-x86_64", "revision", "image", "test")
-    assert data["schema_version"] == 3
+    assert data["schema_version"] == 4
+    assert data["platform"] == {"os": "linux", "arch": "x86_64"}
+    assert data["builder"]["backend"] == "manylinux-x86_64"
     assert ("description" in data) == bool(description)
     stage = tmp_path / "stage"
     stage.mkdir()

@@ -23,7 +23,7 @@ commit = "e444744c03978c1fb4e037168967020cf2648427"
 
 # Upstream already uses -O3 in the release profile so we're not specifying any flags here
 [targets.linux-x86_64]
-compiler = "clang"
+toolchain = "clang"
 lto = "thin"
 cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
 extra_ldflags = ["-shared-libgcc", "-Wl,--strip-debug"]
@@ -32,7 +32,7 @@ extra_ldflags = ["-shared-libgcc", "-Wl,--strip-debug"]
 requirements = ["libgcc_s.so.1"]
 
 [targets.windows-x86_64]
-compiler = "clang"
+toolchain = "clang"
 lto = "thin"
 cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
 extra_ldflags = ["-Wl,--strip-debug"]

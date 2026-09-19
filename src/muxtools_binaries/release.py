@@ -12,6 +12,7 @@ from .artifacts import read_metadata
 from .build import builder_image
 from .io import extract, sha256
 from .models import Package, load_packages
+from .targets import target_spec
 
 
 def release_allowed(event: str, ref: str, publish: bool) -> bool:
@@ -127,16 +128,18 @@ def _validate_target(data: dict[str, Any], package: Package, root: Path) -> None
     from .checks import archive_checks
     from .recipes import load_recipe, recipe_checks
 
-    if data["schema_version"] != 3:
+    if data["schema_version"] not in (3, 4):
         actual_checks = archive_checks(data)
         if actual_checks != recipe_checks(load_recipe(root, package.name), package, data["target"]):
             raise ValueError("Artifact checks differ from package recipe")
     config = package.targets[data["target"]]
-    if data["schema_version"] != 3 and data["smoke"] != package.executables:
+    if data["schema_version"] not in (3, 4) and data["smoke"] != package.executables:
         raise ValueError("Artifact smoke commands differ from package definition")
     if config.asset and data["provenance"].get("asset") != config.asset.model_dump():
         raise ValueError("Artifact import differs from package definition")
-    expected_runtime = config.runtime.model_dump(exclude_defaults=True) if data["target"].startswith("linux") else {}
+    expected_runtime = (
+        config.runtime.model_dump(exclude_defaults=True) if target_spec(data["target"]).os == "linux" else {}
+    )
     if data.get("runtime", {}) != expected_runtime:
         raise ValueError("Artifact runtime differs from package definition")
     if (
@@ -145,7 +148,11 @@ def _validate_target(data: dict[str, Any], package: Package, root: Path) -> None
     ):
         raise ValueError("Artifact build options differ from package definition")
     if package.type == "source-build":
-        for key in ("compiler", "lto", "cpu_levels", "extra_cflags", "extra_cxxflags", "extra_ldflags"):
+        build = data.get("build", {})
+        recorded_toolchain = build.get("toolchain") if data["schema_version"] >= 4 else build.get("compiler")
+        if recorded_toolchain != config.toolchain:
+            raise ValueError("Artifact build setting differs from package definition: toolchain")
+        for key in ("lto", "cpu_levels", "extra_cflags", "extra_cxxflags", "extra_ldflags"):
             if data.get("build", {}).get(key) != getattr(config, key):
                 raise ValueError(f"Artifact build setting differs from package definition: {key}")
 
@@ -153,9 +160,20 @@ def _validate_target(data: dict[str, Any], package: Package, root: Path) -> None
 def _require_native_report(artifacts: Path, archive: Path, digest: str, package: Package, target: str) -> None:
     reports = [json.loads(path.read_text()) for path in artifacts.rglob(archive.name + ".report.json")]
     required = {"structure", "smoke", *[f"run:{name}:baseline" for name in package.executables]}
-    native_os = "nt" if target.startswith("windows") else "posix"
+    target_info = target_spec(target)
+    native_os = "nt" if target_info.os == "windows" else "posix"
+
+    def native(report: dict[str, Any]) -> bool:
+        if report.get("schema_version") == 2:
+            return (
+                report.get("os") == target_info.os
+                and report.get("arch") == target_info.arch
+                and report.get("target") == target
+            )
+        return report.get("schema_version", 1) == 1 and target_info.arch == "x86_64" and report.get("os") == native_os
+
     if not any(
-        report.get("sha256") == digest and required <= set(report.get("checks", [])) and report.get("os") == native_os
+        report.get("sha256") == digest and required <= set(report.get("checks", [])) and native(report)
         for report in reports
     ):
         raise ValueError(f"Missing native smoke report: {archive.name}")
@@ -175,7 +193,7 @@ def collect(root: Path, artifacts: Path) -> ReleaseArtifacts:
         package = packages[data["name"]]
         _validate_package(data, package)
         if data["builder"]["revision"] != os.environ["GITHUB_SHA"] or data["builder"]["image"] != builder_image(
-            root, release=True
+            root, data["target"], release=True
         ):
             raise ValueError("Artifact revision or builder is not eligible for publishing")
         _validate_target(data, package, root)

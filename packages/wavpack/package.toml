@@ -12,12 +12,12 @@ tag = "5.9.0"
 commit = "5803634a030e2a11dba602ba057b89cc34486c67"
 
 [targets.linux-x86_64]
-compiler = "gcc"
+toolchain = "gcc"
 lto = false
 cpu_levels = ["baseline"]
 
 [targets.windows-x86_64]
-compiler = "gcc"
+toolchain = "gcc"
 lto = false
 cpu_levels = ["baseline"]
 

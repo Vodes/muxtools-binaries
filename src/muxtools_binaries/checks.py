@@ -40,7 +40,7 @@ class CheckSuite(Model):
     smoke: dict[str, CommandCheck] = Field(min_length=1)
     functional: list[Annotated[AudioCheck | VideoCheck, Field(discriminator="kind")]] = Field(default_factory=list)
     # Explicit paths include wrappers and private executable resources.
-    files: dict[str, Literal["elf", "pe", "script"]] = Field(default_factory=dict)
+    files: dict[str, Literal["elf", "pe", "macho", "script"]] = Field(default_factory=dict)
     forbidden_libraries: list[str] = Field(default_factory=list)
 
     def validate_binaries(self, binaries: dict[str, dict[str, str]]) -> None:

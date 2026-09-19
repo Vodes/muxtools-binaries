@@ -6,12 +6,6 @@ version = "102.0"
 version_code = 3
 type = "source-build"
 
-[build]
-gmp_url = "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz"
-gmp_sha256 = "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
-iconv_url = "https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz"
-iconv_sha256 = "3b08f5f4f9b4eb82f151a7040bfd6fe6c6fb922efe4b1659c66ea933276965e8"
-
 [source]
 repository = "https://codeberg.org/mbunkus/mkvtoolnix.git"
 tag = "release-102.0"
@@ -54,8 +48,18 @@ repository = "https://github.com/qt/qtbase.git"
 tag = "v6.8.3"
 commit = "c07c2d5a527a644d36e7853d55132ae38921682f"
 
+[dependencies.gmp]
+url = "https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz"
+sha256 = "a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898"
+format = "tar.xz"
+
+[dependencies.iconv]
+url = "https://ftp.gnu.org/pub/gnu/libiconv/libiconv-1.18.tar.gz"
+sha256 = "3b08f5f4f9b4eb82f151a7040bfd6fe6c6fb922efe4b1659c66ea933276965e8"
+format = "tar.gz"
+
 [targets.linux-x86_64]
-compiler = "gcc"
+toolchain = "gcc"
 lto = false
 cpu_levels = ["baseline"]
 extra_ldflags = ["-shared-libgcc"]
@@ -64,7 +68,7 @@ extra_ldflags = ["-shared-libgcc"]
 requirements = ["libgcc_s.so.1"]
 
 [targets.windows-x86_64]
-compiler = "gcc"
+toolchain = "gcc"
 lto = false
 cpu_levels = ["baseline"]
 extra_cflags = ["-DFLAC__NO_DLL"]

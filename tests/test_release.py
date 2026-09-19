@@ -54,10 +54,9 @@ def releases(package, tmp_path, monkeypatch, recipe_root, request):
             source=package.source.model_dump(),
             provenance={"type": package.type, "channel": "release"},
             builder={"revision": "fixture-revision", "image": "fixture-image"},
-            build=config.model_dump(
-                include={"compiler", "lto", "cpu_levels", "extra_cflags", "extra_cxxflags", "extra_ldflags"}
-            ),
+            build=config.model_dump(include={"lto", "cpu_levels", "extra_cflags", "extra_cxxflags", "extra_ldflags"}),
         )
+        data["build"]["compiler"] = config.toolchain
         data["build"].update(options=package.build, target_options=config.build)
         if package.description:
             data["description"] = package.description
@@ -65,6 +64,7 @@ def releases(package, tmp_path, monkeypatch, recipe_root, request):
         archive.with_name(archive.name + ".report.json").write_text(
             json.dumps(
                 dict(
+                    schema_version=1,
                     sha256=sha256(archive),
                     os="nt" if target.startswith("windows") else "posix",
                     checks=["structure", "smoke", f"run:{package.name}:baseline"],
@@ -72,6 +72,34 @@ def releases(package, tmp_path, monkeypatch, recipe_root, request):
             )
         )
     return artifacts
+
+
+def test_arm_report_requires_explicit_native_identity(package, tmp_path):
+    from muxtools_binaries.release import _require_native_report
+
+    definition = package.model_dump()
+    definition["targets"] = {"linux-arm64": {"toolchain": "gcc"}}
+    package = type(package).model_validate(definition)
+    archive = tmp_path / "example.tar.zst"
+    report = tmp_path / (archive.name + ".report.json")
+    checks = ["structure", "smoke", *[f"run:{name}:baseline" for name in package.executables]]
+    legacy = {"schema_version": 1, "sha256": "digest", "os": "posix", "checks": checks}
+    report.write_text(json.dumps(legacy))
+    with pytest.raises(ValueError, match="Missing native"):
+        _require_native_report(tmp_path, archive, "digest", package, "linux-arm64")
+
+    report.write_text(
+        json.dumps(
+            legacy
+            | {
+                "schema_version": 2,
+                "os": "linux",
+                "arch": "arm64",
+                "target": "linux-arm64",
+            }
+        )
+    )
+    _require_native_report(tmp_path, archive, "digest", package, "linux-arm64")
 
 
 @pytest.mark.parametrize("broken", ["target", "report"])

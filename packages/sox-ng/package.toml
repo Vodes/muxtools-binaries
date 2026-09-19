@@ -6,12 +6,6 @@ version = "14.8.1"
 version_code = 1
 type = "source-build"
 
-[build]
-fftw_url = "https://fftw.org/pub/fftw/fftw-3.3.11.tar.gz"
-fftw_sha256 = "5630c24cdeb33b131612f7eb4b1a9934234754f9f388ff8617458d0be6f239a1"
-lame_url = "https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz"
-lame_sha256 = "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
-
 [source]
 repository = "https://codeberg.org/sox_ng/sox_ng.git"
 tag = "sox_ng-14.8.1"
@@ -67,13 +61,23 @@ repository = "https://github.com/dbry/WavPack.git"
 tag = "5.9.0"
 commit = "5803634a030e2a11dba602ba057b89cc34486c67"
 
+[dependencies.lame]
+url = "https://downloads.sourceforge.net/project/lame/lame/3.100/lame-3.100.tar.gz"
+sha256 = "ddfe36cab873794038ae2c1210557ad34857a4b6bdc515785d1da9e175b1da1e"
+format = "tar.gz"
+
+[dependencies.fftw]
+url = "https://fftw.org/pub/fftw/fftw-3.3.11.tar.gz"
+sha256 = "5630c24cdeb33b131612f7eb4b1a9934234754f9f388ff8617458d0be6f239a1"
+format = "tar.gz"
+
 [targets.linux-x86_64]
-compiler = "gcc"
+toolchain = "gcc"
 lto = false
 cpu_levels = ["baseline"]
 
 [targets.windows-x86_64]
-compiler = "gcc"
+toolchain = "gcc"
 lto = false
 cpu_levels = ["baseline"]
 extra_cflags = ["-DFLAC__NO_DLL"]

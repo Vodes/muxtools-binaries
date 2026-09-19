@@ -1,28 +1,16 @@
 import re
-import shlex
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from packaging.version import Version
-from pydantic import Field
 
 from muxtools_binaries.build import BuildContext
 from muxtools_binaries.checks import AudioCheck, CheckSuite, default_checks
-from muxtools_binaries.io import download, extract, run
-from muxtools_binaries.models import Model, Package
-from muxtools_binaries.recipes import recipe_options
+from muxtools_binaries.io import run
+from muxtools_binaries.models import Package
+from muxtools_binaries.targets import target_spec
 from muxtools_binaries.updates import UpdateContext
-
-TRIPLE = "x86_64-w64-mingw32"
-
-
-class Options(Model):
-    gmp_url: str = Field(pattern=r"^https://")
-    gmp_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    iconv_url: str = Field(pattern=r"^https://")
-    iconv_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-
 
 _QT_OPTIONS = [
     "-release",
@@ -58,41 +46,11 @@ def _static_zlib(ctx: BuildContext, source: Path) -> None:
     run(["make", "install"], cwd=source, env=env)
 
 
-def _static_gmp(ctx: BuildContext, options: Options) -> None:
-    archive = download(options.gmp_url, options.gmp_sha256, ctx.cache)
-    extracted = ctx.work / ctx.tier / "sources" / "gmp-archive"
-    extract(archive, extracted, "tar.xz")
-    sources = [path for path in extracted.iterdir() if path.is_dir()]
-    if len(sources) != 1:
-        raise ValueError("Expected one GMP source directory")
-    source = sources[0]
-    ctx.notices(source, "gmp")
-    build = ctx.work / ctx.tier / "gmp"
-    build.mkdir(parents=True, exist_ok=True)
-    env = ctx.environment()
-    configure: list[str | Path] = [
-        source / "configure",
-        f"--prefix={ctx.prefix}",
-        "--disable-shared",
-        "--enable-static",
-        "--enable-cxx",
-    ]
-    if ctx.windows:
-        configure.append(f"--host={TRIPLE}")
-    run(configure, cwd=build, env=env)
-    run(["make", f"-j{ctx.jobs}"], cwd=build, env=env)
-    run(["make", "install"], cwd=build, env=env)
+def _static_gmp(ctx: BuildContext, source: Path) -> None:
+    ctx.autotools("gmp", source, ["--enable-cxx"], flags_in_compiler=False)
 
 
-def _static_iconv(ctx: BuildContext, options: Options) -> None:
-    archive = download(options.iconv_url, options.iconv_sha256, ctx.cache)
-    extracted = ctx.work / ctx.tier / "sources" / "iconv-archive"
-    extract(archive, extracted, "tar.gz")
-    sources = [path for path in extracted.iterdir() if path.is_dir()]
-    if len(sources) != 1:
-        raise ValueError("Expected one libiconv source directory")
-    source = sources[0]
-    ctx.notices(source, "libiconv")
+def _static_iconv(ctx: BuildContext, source: Path) -> None:
     ctx.autotools("iconv", source, ["--disable-nls"])
 
 
@@ -112,9 +70,9 @@ def _static_zstd(ctx: BuildContext, source: Path) -> None:
 
 def _build_boost(ctx: BuildContext, source: Path) -> None:
     target_env = ctx.environment()
-    build_env = _native_environment(ctx)
+    build_env = ctx.host_environment()
     if ctx.windows:
-        (source / "user-config.jam").write_text(f"using gcc : mingw : {TRIPLE}-g++ ;\n")
+        (source / "user-config.jam").write_text(f"using gcc : mingw : {ctx.toolchain.cxx} ;\n")
     run([source / "bootstrap.sh", "--with-libraries=filesystem,system"], cwd=source, env=build_env)
     b2 = source / "b2"
     options: list[str | Path] = [
@@ -126,7 +84,7 @@ def _build_boost(ctx: BuildContext, source: Path) -> None:
         "link=static",
         "runtime-link=static",
         "threading=multi",
-        "architecture=x86",
+        f"architecture={'x86' if ctx.target_info.arch == 'x86_64' else 'arm'}",
         "address-model=64",
         f"cxxflags={target_env['CXXFLAGS']}",
         f"linkflags={target_env['LDFLAGS']}",
@@ -144,34 +102,13 @@ def _build_boost(ctx: BuildContext, source: Path) -> None:
     run(options, cwd=source, env=build_env)
 
 
-def _native_environment(ctx: BuildContext) -> dict[str, str]:
-    if not ctx.windows:
-        return ctx.environment()
-    env = ctx.environment()
-    flags = ["-march=x86-64-v2"]
-    env.update(
-        CC="gcc",
-        CXX="g++",
-        AR="gcc-ar",
-        RANLIB="gcc-ranlib",
-        NM="gcc-nm",
-        CFLAGS=shlex.join(flags),
-        CXXFLAGS=shlex.join(flags),
-        LDFLAGS=shlex.join([*flags, "-static-libstdc++", "-static-libgcc"]),
-        CPPFLAGS="",
-        PKG_CONFIG_LIBDIR="",
-        PKG_CONFIG_PATH="",
-    )
-    return env
-
-
 def _build_qt(ctx: BuildContext, source: Path) -> Path:
     target_env = ctx.environment()
     host_prefix = ctx.work / ctx.tier / "qt-host-prefix"
     if ctx.windows:
         host_build = ctx.work / ctx.tier / "qt-host"
         host_build.mkdir(parents=True, exist_ok=True)
-        host_env = _native_environment(ctx)
+        host_env = ctx.host_environment()
         run(
             [source / "configure", *_QT_OPTIONS, "-prefix", host_prefix],
             cwd=host_build,
@@ -187,12 +124,12 @@ def _build_qt(ctx: BuildContext, source: Path) -> Path:
         toolchain = ctx.work / ctx.tier / "qt-mingw-toolchain.cmake"
         toolchain.write_text(
             "set(CMAKE_SYSTEM_NAME Windows)\n"
-            'set(CMAKE_SYSTEM_PROCESSOR "x86_64")\n'
-            f'set(CMAKE_C_COMPILER "{TRIPLE}-gcc")\n'
-            f'set(CMAKE_CXX_COMPILER "{TRIPLE}-g++")\n'
-            f'set(CMAKE_RC_COMPILER "{TRIPLE}-windres")\n'
-            f'set(CMAKE_AR "{TRIPLE}-gcc-ar")\n'
-            f'set(CMAKE_RANLIB "{TRIPLE}-gcc-ranlib")\n'
+            f'set(CMAKE_SYSTEM_PROCESSOR "{ctx.target_info.arch}")\n'
+            f'set(CMAKE_C_COMPILER "{ctx.toolchain.cc}")\n'
+            f'set(CMAKE_CXX_COMPILER "{ctx.toolchain.cxx}")\n'
+            f'set(CMAKE_RC_COMPILER "{ctx.toolchain.windres}")\n'
+            f'set(CMAKE_AR "{ctx.toolchain.ar}")\n'
+            f'set(CMAKE_RANLIB "{ctx.toolchain.ranlib}")\n'
             "set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)\n"
             "set(CMAKE_FIND_ROOT_PATH_MODE_LIBRARY ONLY)\n"
             "set(CMAKE_FIND_ROOT_PATH_MODE_INCLUDE ONLY)\n"
@@ -202,7 +139,7 @@ def _build_qt(ctx: BuildContext, source: Path) -> Path:
             "-xplatform",
             "win32-g++",
             "-device-option",
-            f"CROSS_COMPILE={TRIPLE}-",
+            f"CROSS_COMPILE={ctx.toolchain.host}-",
             "-qt-host-path",
             host_prefix,
             "--",
@@ -290,7 +227,7 @@ def _build_mkvtoolnix(ctx: BuildContext, source: Path, qmake: Path) -> None:
         f"--with-extra-libs={ctx.prefix / 'lib'}",
     ]
     if ctx.windows:
-        options.append(f"--host={TRIPLE}")
+        options.append(f"--host={ctx.toolchain.host}")
     result = run(options, cwd=source, env=env, capture=True)
     summary = getattr(result, "stdout", "")
     if summary:
@@ -302,17 +239,16 @@ def _build_mkvtoolnix(ctx: BuildContext, source: Path, qmake: Path) -> None:
 
 
 def build(ctx: BuildContext) -> None:
-    options = recipe_options(ctx.package, ctx.target, Options)
     ctx.tier = "baseline"
     dependencies = ctx.package.dependencies
     _static_zlib(ctx, ctx.source("zlib", dependencies["zlib"]))
     _static_zstd(ctx, ctx.source("zstd", dependencies["zstd"]))
     if ctx.windows:
-        _static_iconv(ctx, options)
+        _static_iconv(ctx, ctx.source("iconv", dependencies["iconv"]))
     ctx.autotools("ogg", ctx.source("ogg", dependencies["ogg"]))
     ctx.autotools("vorbis", ctx.source("vorbis", dependencies["vorbis"]))
     ctx.autotools("flac", ctx.source("flac", dependencies["flac"]), ["--disable-doxygen-docs", "--disable-cpplibs"])
-    _static_gmp(ctx, options)
+    _static_gmp(ctx, ctx.source("gmp", dependencies["gmp"]))
     _build_boost(ctx, ctx.source("boost", dependencies["boost"]))
     qmake = _build_qt(ctx, ctx.source("qtbase", dependencies["qtbase"]))
     if ctx.package.source is None:
@@ -347,7 +283,7 @@ def checks(package: Package, target: str) -> CheckSuite:
             "libzstd.so*",
             "libstdc++.so*",
         ]
-        if target.startswith("linux")
+        if target_spec(target).os == "linux"
         else [
             "Qt6Core.dll",
             "libFLAC*.dll",
@@ -394,4 +330,4 @@ def discover_update(ctx: UpdateContext) -> dict[str, Any]:
     return ctx.data
 
 
-__all__ = ["Options", "build", "checks", "discover_update"]
+__all__ = ["build", "checks", "discover_update"]

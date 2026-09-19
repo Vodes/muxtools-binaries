@@ -16,7 +16,7 @@ from .models import Package, load_packages
 from .recipes import load_recipe, recipe_checks
 
 
-def latest_tag(source: dict[str, Any]) -> dict[str, Any]:
+def latest_tag(source: dict[str, Any], prefix: str = "") -> dict[str, Any]:
     result = subprocess.run(
         ["git", "ls-remote", "--tags", source["repository"]], check=True, text=True, capture_output=True
     )
@@ -24,13 +24,21 @@ def latest_tag(source: dict[str, Any]) -> dict[str, Any]:
     candidates = []
     for ref, commit in refs.items():
         tag = ref.removeprefix("refs/tags/")
-        if re.fullmatch(r"v?\d+(?:\.\d+)+", tag):
-            candidates.append((Version(tag.removeprefix("v")), tag, refs.get(ref + "^{}", commit)))
+        if prefix and not tag.startswith(prefix):
+            continue
+        version = tag[len(prefix) :] if prefix else tag
+        if re.fullmatch(r"v?\d+(?:\.\d+)+", version):
+            candidates.append((Version(version.removeprefix("v")), tag, refs.get(ref + "^{}", commit)))
     if not candidates:
         raise ValueError(f"No stable version tags in {source['repository']}")
     _, tag, commit = max(candidates)
     try:
-        if Version(tag.removeprefix("v")) <= Version(source["tag"].removeprefix("v")):
+        current = source["tag"]
+        if prefix:
+            if not current.startswith(prefix):
+                raise ValueError
+            current = current[len(prefix) :]
+        if Version(current.removeprefix("v")) >= Version(tag[len(prefix) :].removeprefix("v")):
             return source
     except InvalidVersion:
         raise ValueError(f"Cannot order source tag {source['tag']}") from None
@@ -58,10 +66,13 @@ class UpdateContext:
         self.data = copy.deepcopy(data)
 
     def source_tags(self) -> dict[str, Any]:
-        self.data["source"] = latest_tag(self.data["source"])
+        if "repository" in self.data["source"]:
+            self.data["source"] = latest_tag(self.data["source"])
         if "dependencies" in self.data:
-            self.data["dependencies"] = {name: latest_tag(pin) for name, pin in self.data["dependencies"].items()}
-        if self.pins_changed:
+            self.data["dependencies"] = {
+                name: latest_tag(pin) if "repository" in pin else pin for name, pin in self.data["dependencies"].items()
+            }
+        if self.pins_changed and "tag" in self.data["source"]:
             self.data["version"] = self.data["source"]["tag"].removeprefix("v")
         return self.data
 

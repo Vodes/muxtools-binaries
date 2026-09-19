@@ -57,7 +57,7 @@ def build(ctx: BuildContext) -> None:
         for depth in sorted(options.bit_depths, reverse=True):
             result = ctx.cmake(f"x265-{depth}", source, options.cmake | multilib_definitions(depth, libraries))
             if depth == 8:
-                ctx.stage_binary(result / ("x265.exe" if ctx.windows else "x265"), "x265")
+                ctx.stage_binary(result / ("x265" + ctx.target_info.executable_suffix), "x265")
             else:
                 libraries[depth] = result / "libx265.a"
 

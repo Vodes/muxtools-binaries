@@ -44,9 +44,21 @@ uv run muxtools-build build flac --target windows-x86_64 --image muxtools-builde
 ```
 
 Copy the resulting archive to Windows and run `muxtools-build test` there.
-CI supplies native runners for both targets.
+CI supplies native runners for every declared target.
 `--structural-only` checks archive structure without running the tools;
 it does not replace native tests.
+
+FLAC also declares `linux-arm64`. On an x86-64 Docker host with ARM emulation,
+build and use the ARM builder explicitly:
+
+```sh
+docker buildx build --platform linux/arm64 --build-arg BUILDER_ID=manylinux-arm64 \
+  --build-arg BASE=quay.io/pypa/manylinux_2_34_aarch64@sha256:db1a485b015c1d9a6d7e2929367a69a6f772964be06cca8fe585f959a47ec0b7 \
+  --load -t muxtools-builder:arm64 -f builder/Dockerfile .
+uv run muxtools-build build flac --target linux-arm64 --image muxtools-builder:arm64
+```
+
+This runs through QEMU locally and is slower than the native ARM64 CI runner.
 
 If you invoke the test command outside the checkout, put `--root /path/to/checkout`
 before `test`. This lets the runner find `tests/data/audio/wav_source.wav`.

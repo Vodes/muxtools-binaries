@@ -18,7 +18,7 @@ def build(ctx: BuildContext) -> None:
         raise ValueError("FFmpeg requires an imported asset")
     unpacked = ctx.work / "import"
     extract(ctx.asset(), unpacked, ctx.config.asset.format)
-    extension = ".exe" if ctx.windows else ""
+    extension = ctx.target_info.executable_suffix
 
     for name in ctx.package.executables:
         matches = list(unpacked.rglob(name + extension))

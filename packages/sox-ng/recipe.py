@@ -1,37 +1,17 @@
 import re
 import subprocess
-from pathlib import Path
 from typing import Any
 
 from packaging.version import Version
-from pydantic import Field
 
 from muxtools_binaries.build import BuildContext
 from muxtools_binaries.checks import AudioCheck, CheckSuite, CommandCheck, default_checks
-from muxtools_binaries.io import download, extract, run
-from muxtools_binaries.models import Model, Package
+from muxtools_binaries.io import run
+from muxtools_binaries.models import Package
 from muxtools_binaries.updates import UpdateContext, latest_tag
 
 
-class Options(Model):
-    fftw_url: str = Field(pattern=r"^https://")
-    fftw_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    lame_url: str = Field(pattern=r"^https://")
-    lame_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-
-
-def _archive(ctx: BuildContext, name: str, url: str, digest: str) -> Path:
-    destination = ctx.work / ctx.tier / "sources" / name
-    extract(download(url, digest, ctx.cache), destination, "tar.gz")
-    sources = list(destination.iterdir())
-    if len(sources) != 1 or not sources[0].is_dir():
-        raise ValueError(f"Expected one source directory in {name} archive")
-    ctx.notices(sources[0], name)
-    return sources[0]
-
-
 def build(ctx: BuildContext) -> None:
-    options = Options.model_validate(ctx.package.build)
     ctx.tier = "baseline"
 
     # zlib has its own configure script; it does not use Autotools options.
@@ -52,9 +32,11 @@ def build(ctx: BuildContext) -> None:
     )
     ctx.autotools("vorbis", ctx.source("vorbis", ctx.package.dependencies["vorbis"]))
     ctx.autotools("png", ctx.source("png", ctx.package.dependencies["png"]))
-    ctx.autotools("lame", _archive(ctx, "lame", options.lame_url, options.lame_sha256), ["--disable-frontend"])
+    ctx.autotools("lame", ctx.source("lame", ctx.package.dependencies["lame"]), ["--disable-frontend"])
     ctx.autotools(
-        "fftw", _archive(ctx, "fftw", options.fftw_url, options.fftw_sha256), ["--disable-threads", "--disable-openmp"]
+        "fftw",
+        ctx.source("fftw", ctx.package.dependencies["fftw"]),
+        ["--disable-threads", "--disable-openmp"],
     )
     ctx.cmake(
         "id3tag", ctx.source("id3tag", ctx.package.dependencies["id3tag"]), {"ZLIB_ROOT": str(ctx.prefix)}, install=True
@@ -147,7 +129,9 @@ def discover_update(ctx: UpdateContext) -> dict[str, Any]:
     version, tag, commit = max(candidates)
     if version > Version(source["tag"].removeprefix("sox_ng-")):
         source.update(tag=tag, commit=commit)
-    ctx.data["dependencies"] = {name: latest_tag(pin) for name, pin in ctx.data["dependencies"].items()}
+    ctx.data["dependencies"] = {
+        name: latest_tag(pin) if "repository" in pin else pin for name, pin in ctx.data["dependencies"].items()
+    }
     if ctx.pins_changed:
         base = source["tag"].removeprefix("sox_ng-")
         ctx.data["version"] = (
@@ -156,4 +140,4 @@ def discover_update(ctx: UpdateContext) -> dict[str, Any]:
     return ctx.data
 
 
-__all__ = ["Options", "build", "checks", "discover_update"]
+__all__ = ["build", "checks", "discover_update"]

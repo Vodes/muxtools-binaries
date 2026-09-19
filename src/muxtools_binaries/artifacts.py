@@ -1,5 +1,5 @@
 import json
-import os
+import platform
 import tarfile
 import tomllib
 from pathlib import Path
@@ -11,19 +11,22 @@ import zstandard
 from .checks import archive_checks
 from .io import run, sha256
 from .models import Package, safe_path
+from .targets import TARGETS, normalize_arch, normalize_os, target_spec, toolchain_spec
 
 
 def metadata(package: Package, target: str, revision: str, image: str, channel: str) -> dict[str, Any]:
     config = package.targets[target]
+    target_info = target_spec(target)
     data: dict[str, Any] = dict(
-        schema_version=3,
+        schema_version=4,
         name=package.name,
         version=package.version,
         version_code=package.version_code,
         target=target,
+        platform=dict(os=target_info.os, arch=target_info.arch),
         binaries=package.binaries(target),
         provenance=dict(type=package.type, channel=channel),
-        builder=dict(revision=revision, image=image),
+        builder=dict(revision=revision, image=image, backend=target_info.builder),
     )
     if package.description:
         data["description"] = package.description
@@ -33,24 +36,20 @@ def metadata(package: Package, target: str, revision: str, image: str, channel: 
         data["source"] = package.source.model_dump()
     if package.dependencies:
         data["dependencies"] = {name: pin.model_dump() for name, pin in package.dependencies.items()}
-    if target.startswith("linux") and (config.runtime.exception or config.runtime.requirements):
+    if target_info.os == "linux" and (config.runtime.exception or config.runtime.requirements):
         data["runtime"] = config.runtime.model_dump(exclude_defaults=True)
     if config.asset:
         data["provenance"]["asset"] = config.asset.model_dump()
     if package.type == "source-build":
-        from .build import TRIPLE
-
-        compiler = config.compiler
-        executable = (TRIPLE + "-" if target.startswith("windows") and compiler == "gcc" else "") + compiler
-        linker = "ld.lld" if compiler == "clang" else (TRIPLE + "-" if target.startswith("windows") else "") + "ld"
+        toolchain = toolchain_spec(target, config.toolchain)
         data["build"] = {
             key: getattr(config, key)
-            for key in ("compiler", "lto", "cpu_levels", "extra_cflags", "extra_cxxflags", "extra_ldflags")
+            for key in ("toolchain", "lto", "cpu_levels", "extra_cflags", "extra_cxxflags", "extra_ldflags")
         }
         data["build"].update(
-            compiler_version=run([executable, "--version"], capture=True).stdout.splitlines()[0],
-            linker=linker,
-            linker_version=run([linker, "--version"], capture=True).stdout.splitlines()[0],
+            compiler_version=run([toolchain.cc, "--version"], capture=True).stdout.splitlines()[0],
+            linker=toolchain.linker,
+            linker_version=run([toolchain.linker, "--version"], capture=True).stdout.splitlines()[0],
         )
     if package.build:
         data.setdefault("build", {})["options"] = package.build
@@ -62,7 +61,7 @@ def metadata(package: Package, target: str, revision: str, image: str, channel: 
 def validate_layout(stage: Path, data: dict[str, Any]) -> None:
     import re
 
-    from .models import TARGETS, TIERS
+    from .models import TIERS
 
     if not re.fullmatch(r"[a-z][a-z0-9-]*", data.get("name", "")) or not re.fullmatch(
         r"[a-zA-Z0-9][a-zA-Z0-9.+_-]*", data.get("version", "")
@@ -70,8 +69,17 @@ def validate_layout(stage: Path, data: dict[str, Any]) -> None:
         raise ValueError("Invalid artifact identity")
     if type(data.get("version_code")) is not int or data["version_code"] < 1 or data.get("target") not in TARGETS:
         raise ValueError("Invalid artifact version code or target")
-    if data.get("schema_version") not in (1, 2, 3) or data.get("provenance", {}).get("channel") not in ("test", "release"):
+    if data.get("schema_version") not in (1, 2, 3, 4) or data.get("provenance", {}).get("channel") not in (
+        "test",
+        "release",
+    ):
         raise ValueError("Unsupported metadata schema or channel")
+    if data["schema_version"] == 4:
+        target = target_spec(data["target"])
+        if data.get("platform") != {"os": target.os, "arch": target.arch}:
+            raise ValueError("Artifact platform differs from its target")
+        if data.get("builder", {}).get("backend") != target.builder:
+            raise ValueError("Artifact builder differs from its target")
     if not isinstance(data.get("description", ""), str):
         raise ValueError("Invalid artifact description")
     seen = set()
@@ -89,7 +97,7 @@ def validate_layout(stage: Path, data: dict[str, Any]) -> None:
             path = stage / safe_path(name)
             if not path.is_file():
                 raise ValueError(f"Missing executable: {name}")
-            if data["target"].startswith("linux") and not path.stat().st_mode & 0o111:
+            if target_spec(data["target"]).os == "linux" and not path.stat().st_mode & 0o111:
                 raise ValueError(f"Missing executable mode: {name}")
     if data["schema_version"] == 2:
         for name in archive_checks(data).files:
@@ -133,10 +141,19 @@ def read_metadata(stage: Path) -> dict[str, Any]:
     return data
 
 
-def write_report(archive: Path, checks: list[str], output: Path) -> None:
+def write_report(archive: Path, checks: list[str], output: Path, target: str) -> None:
+    target_info = target_spec(target)
     output.write_text(
         json.dumps(
-            {"schema_version": 1, "archive": archive.name, "sha256": sha256(archive), "checks": checks, "os": os.name},
+            {
+                "schema_version": 2,
+                "archive": archive.name,
+                "sha256": sha256(archive),
+                "checks": checks,
+                "os": normalize_os(platform.system()),
+                "arch": normalize_arch(platform.machine()),
+                "target": target_info.name,
+            },
             indent=2,
         )
         + "\n"

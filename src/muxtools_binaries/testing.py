@@ -16,6 +16,7 @@ from .audio_testing import exercise_audio
 from .checks import AudioCheck, CheckSuite, CommandCheck
 from .io import Command, extract, run
 from .recipes import checks_for_archive
+from .targets import normalize_arch, normalize_os, target_spec
 
 # Each tier adds to the previous tier's feature requirements.
 TIER_FEATURES = {
@@ -96,28 +97,46 @@ def cpu_state() -> set[str]:
     return set()
 
 
-def binary_format(path: Path) -> Literal["elf", "pe", "script"]:
+def binary_format(path: Path, target: str | None = None) -> Literal["elf", "pe", "macho", "script"]:
     with path.open("rb") as stream:
         header = stream.read(64)
         if header.startswith(b"\x7fELF"):
-            if len(header) < 20 or header[4:6] != b"\x02\x01" or struct.unpack_from("<H", header, 18)[0] != 62:
-                raise ValueError(f"Expected ELF x86-64: {path}")
+            machine = struct.unpack_from("<H", header, 18)[0] if len(header) >= 20 else None
+            machines = {62: "x86_64", 183: "arm64"}
+            if header[4:6] != b"\x02\x01" or machine not in machines:
+                raise ValueError(f"Unsupported ELF architecture: {path}")
+            if target and (target_spec(target).binary_format != "elf" or machines[machine] != target_spec(target).arch):
+                raise ValueError(f"Wrong target architecture: {path}")
             return "elf"
         if header.startswith(b"MZ"):
             if len(header) < 64:
                 raise ValueError(f"Truncated PE: {path}")
             stream.seek(struct.unpack_from("<I", header, 60)[0])
             pe = stream.read(6)
-            if pe != b"PE\0\0d\x86":
-                raise ValueError(f"Expected PE x86-64: {path}")
+            machines = {b"d\x86": "x86_64", b"d\xaa": "arm64"}
+            if pe[:4] != b"PE\0\0" or pe[4:] not in machines:
+                raise ValueError(f"Unsupported PE architecture: {path}")
+            if target and (target_spec(target).binary_format != "pe" or machines[pe[4:]] != target_spec(target).arch):
+                raise ValueError(f"Wrong target architecture: {path}")
             return "pe"
+        if header.startswith(b"\xcf\xfa\xed\xfe"):
+            machine = struct.unpack_from("<I", header, 4)[0] if len(header) >= 8 else None
+            machines = {0x01000007: "x86_64", 0x0100000C: "arm64"}
+            if machine not in machines:
+                raise ValueError(f"Unsupported Mach-O architecture: {path}")
+            if target and (
+                target_spec(target).binary_format != "macho" or machines[machine] != target_spec(target).arch
+            ):
+                raise ValueError(f"Wrong target architecture: {path}")
+            return "macho"
         if header.startswith(b"#!/bin/sh\n"):
             return "script"
     raise ValueError(f"Unknown executable format: {path}")
 
 
 def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = None) -> None:
-    expected = "pe" if data["target"].startswith("windows") else "elf"
+    target = target_spec(data["target"])
+    expected = target.binary_format
     files = suite.files if suite else {}
     forbidden = [pattern.casefold() for pattern in suite.forbidden_libraries] if suite else []
 
@@ -127,8 +146,11 @@ def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = Non
 
     for variants in data["binaries"].values():
         for filename in variants.values():
-            kind = binary_format(stage / filename)
-            if kind != files.get(filename, expected):
+            expected_format = files.get(filename, expected)
+            kind = binary_format(
+                stage / filename, data["target"] if expected_format in ("elf", "pe", "macho") else None
+            )
+            if kind != expected_format:
                 raise ValueError(f"Wrong target format: {filename}")
     for filename, expected_format in files.items():
         if binary_format(stage / filename) != expected_format:
@@ -144,7 +166,7 @@ def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = Non
         "libpthread.so.0",
         "librt.so.1",
         "libresolv.so.2",
-        "ld-linux-x86-64.so.2",
+        target.interpreter or "",
         "libutil.so.1",
     }
     allowed.update(data.get("runtime", {}).get("requirements", []))
@@ -154,8 +176,11 @@ def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = Non
         with path.open("rb") as stream:
             magic = stream.read(4)
         if magic == b"\x7fELF":
-            binary_format(path)
-            details = run(["readelf", "--version-info", "--dynamic", path], capture=True).stdout
+            binary_format(path, data["target"])
+            details = run(["readelf", "--version-info", "--dynamic", "--program-headers", path], capture=True).stdout
+            interpreter = re.search(r"Requesting program interpreter: ([^\]]+)", details)
+            if interpreter and Path(interpreter[1]).name != target.interpreter:
+                raise ValueError(f"Wrong ELF interpreter in {path.name}: {interpreter[1]}")
             versions = [
                 tuple(map(int, version.split("."))) for version in re.findall(r"GLIBC_(\d+\.\d+(?:\.\d+)?)", details)
             ]
@@ -168,7 +193,7 @@ def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = Non
             if re.search(r"\((?:RUNPATH|RPATH)\).*\[(?:/(?:tmp|opt|work)|.*?/build/)", details):
                 raise ValueError(f"Build directory runtime path in {path.name}")
         elif magic[:2] == b"MZ":
-            binary_format(path)
+            binary_format(path, data["target"])
             details = run(["objdump", "-p", path], capture=True).stdout
             for library in re.findall(r"DLL Name: (\S+)", details):
                 check_library(library, path)
@@ -240,8 +265,9 @@ def test_archive(
         structural(stage, data, suite)
         checks = ["structure"]
         if smoke:
-            target_os = "windows" if os.name == "nt" else "linux"
-            if not data["target"].startswith(target_os) or platform.machine().lower() not in ("amd64", "x86_64"):
+            target_os = normalize_os(platform.system())
+            target = target_spec(data["target"])
+            if target.os != target_os or normalize_arch(platform.machine()) != target.arch:
                 raise ValueError("Smoke tests require the native target runner")
             suite = suite or checks_for_archive(data, root)
             features = cpu_state()
@@ -263,5 +289,5 @@ def test_archive(
             exercise(stage, data, suite, cwd, tested, audio_source)
             checks.append("smoke")
         if report:
-            write_report(archive, checks, report)
+            write_report(archive, checks, report, data["target"])
         return checks

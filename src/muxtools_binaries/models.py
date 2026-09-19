@@ -5,8 +5,9 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .targets import TARGETS, target_spec, toolchain_spec
+
 TIERS = ("baseline", "avx2", "avx512", "zn4")
-TARGETS = {"linux-x86_64": ("linux", "x86_64"), "windows-x86_64": ("windows", "x86_64")}
 
 
 def safe_path(value: str) -> str:
@@ -34,11 +35,21 @@ class Model(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
-class Source(Model):
+class GitSource(Model):
     repository: str = Field(pattern=r"^https://")
     tag: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
     commit: str = Field(pattern=r"^[0-9a-f]{40}$")
     recursive: bool = False
+
+
+# Keep the original public name for callers that construct pinned Git sources.
+Source = GitSource
+
+
+class ArchiveSource(Model):
+    url: str = Field(pattern=r"^https://")
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    format: Literal["tar", "tar.gz", "tar.xz", "tar.bz2", "tar.zst", "zip", "7z"]
 
 
 class Asset(Model):
@@ -54,7 +65,7 @@ class Runtime(Model):
 
 
 class Target(Model):
-    compiler: Literal["gcc", "clang"] = "gcc"
+    toolchain: str = "gcc"
     lto: Literal[False, "full", "thin"] = False
     cpu_levels: list[Literal["baseline", "avx2", "avx512", "zn4"]] = Field(default=["baseline"])
     extra_cflags: list[str] = Field(default_factory=list)
@@ -68,7 +79,7 @@ class Target(Model):
     def choices(self) -> Self:
         if not self.cpu_levels or self.cpu_levels[0] != "baseline" or len(set(self.cpu_levels)) != len(self.cpu_levels):
             raise ValueError("CPU levels must be unique and start with baseline")
-        if self.compiler == "gcc" and self.lto == "thin":
+        if self.toolchain.startswith("gcc") and self.lto == "thin":
             raise ValueError("GCC does not support thin LTO")
         return self
 
@@ -81,8 +92,8 @@ class Package(Model):
     version_code: int = Field(ge=1, strict=True)
     type: Literal["source-build", "external-build", "upstream-binary"]
     provider: str = ""
-    source: Source | None = None
-    dependencies: dict[str, Source] = Field(default_factory=dict)
+    source: GitSource | ArchiveSource | None = None
+    dependencies: dict[str, GitSource | ArchiveSource] = Field(default_factory=dict)
     targets: dict[str, Target]
     executables: dict[str, list[str]]
     build: dict[str, Any] = Field(default_factory=dict)
@@ -100,10 +111,14 @@ class Package(Model):
         for target, config in self.targets.items():
             if target not in TARGETS:
                 raise ValueError(f"Target {target} has no registered toolchain")
+            info = target_spec(target)
+            toolchain_spec(target, config.toolchain)
+            if any(level not in info.cpu_flags for level in config.cpu_levels):
+                raise ValueError(f"Unsupported CPU level for {target}")
             if self.type == "source-build":
                 if not self.source or config.asset:
                     raise ValueError("Source builds require source pins and cannot specify an imported asset")
-                if target.startswith("linux") and config.runtime.glibc != "2.34":
+                if info.os == "linux" and config.runtime.glibc != "2.34":
                     raise ValueError("Source builds must meet glibc 2.34")
             elif not config.asset or config.cpu_levels != ["baseline"]:
                 raise ValueError("Imported packages require an asset and baseline-only layout")
@@ -112,7 +127,7 @@ class Package(Model):
         return self
 
     def binaries(self, target: str) -> dict[str, dict[str, str]]:
-        extension = ".exe" if TARGETS[target][0] == "windows" else ""
+        extension = target_spec(target).executable_suffix
         return {
             name: {
                 tier: name + ("" if tier == "baseline" else f".{tier}") + extension

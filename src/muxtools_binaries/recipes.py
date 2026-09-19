@@ -49,7 +49,7 @@ def recipe_checks(recipe: ModuleType, package: Package, target: str) -> CheckSui
 
 
 def checks_for_archive(data: dict[str, Any], root: Path) -> CheckSuite:
-    if data["schema_version"] != 3:
+    if data["schema_version"] not in (3, 4):
         return archive_checks(data)
     package = load_packages(root, [data["name"]])[data["name"]]
     target = data["target"]

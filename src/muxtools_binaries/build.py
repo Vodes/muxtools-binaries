@@ -10,17 +10,10 @@ from pathlib import Path
 from pydantic import Field
 
 from .checks import CheckSuite
-from .io import download, run
-from .models import Model, Package, Source
+from .io import download, extract, run
+from .models import ArchiveSource, GitSource, Model, Package
 from .recipes import load_recipe, recipe_checks, recipe_options
-
-CPU_FLAGS = {
-    "baseline": ["-march=x86-64-v2"],
-    "avx2": ["-march=x86-64-v3"],
-    "avx512": ["-march=x86-64-v4"],
-    "zn4": ["-march=znver4", "-mno-sse4a", "-mno-avx512bf16"],
-}
-TRIPLE = "x86_64-w64-mingw32"
+from .targets import BUILDERS, target_spec, toolchain_spec
 
 
 class AutotoolsOptions(Model):
@@ -47,11 +40,15 @@ class BuildContext:
         self.root, self.package, self.target = root, package, target
         self.work, self.stage, self.jobs = work, stage, jobs
         self.config = package.targets[target]
-        self.windows = target.startswith("windows-")
+        self.target_info = target_spec(target)
+        self.toolchain = toolchain_spec(target, self.config.toolchain)
+        self.windows = self.target_info.os == "windows"
         self.cache = root / "build" / "downloads"
         self.tier = "baseline"
 
-    def source(self, name: str, pin: Source) -> Path:
+    def source(self, name: str, pin: GitSource | ArchiveSource) -> Path:
+        if isinstance(pin, ArchiveSource):
+            return self.archive_source(name, pin)
         path = self.work / self.tier / "sources" / name
         path.parent.mkdir(parents=True, exist_ok=True)
         run(["git", "init", path])
@@ -74,6 +71,18 @@ class BuildContext:
                 self.notices(path / relative, str(Path(name) / relative))
         return path
 
+    def archive_source(self, name: str, pin: ArchiveSource) -> Path:
+        """Download and unpack an archive source into one validated source directory."""
+        archive = download(pin.url, pin.sha256, self.cache)
+        destination = self.work / self.tier / "sources" / name
+        extract(archive, destination, pin.format)
+        sources = list(destination.iterdir())
+        if len(sources) != 1 or not sources[0].is_dir():
+            raise ValueError(f"Expected one source directory in {name} archive")
+        source = sources[0]
+        self.notices(source, name)
+        return source
+
     def notices(self, source: Path, name: str) -> None:
         output = self.stage / "licenses" / name
         for path in source.iterdir():
@@ -85,41 +94,70 @@ class BuildContext:
     def prefix(self) -> Path:
         return self.work / self.tier / "prefix"
 
-    def environment(self) -> dict[str, str]:
-        env = {
-            key: value
-            for key, value in os.environ.items()
-            if key not in {"CFLAGS", "CXXFLAGS", "CPPFLAGS", "LDFLAGS", "CPATH", "LIBRARY_PATH", "PKG_CONFIG_PATH"}
+    def build_environment(self) -> dict[str, str]:
+        removed = {
+            "CC",
+            "CXX",
+            "AR",
+            "NM",
+            "LD",
+            "RANLIB",
+            "WINDRES",
+            "CFLAGS",
+            "CXXFLAGS",
+            "CPPFLAGS",
+            "LDFLAGS",
+            "CPATH",
+            "C_INCLUDE_PATH",
+            "CPLUS_INCLUDE_PATH",
+            "LIBRARY_PATH",
+            "PKG_CONFIG_PATH",
+            "PKG_CONFIG_LIBDIR",
+            "PKG_CONFIG_SYSROOT_DIR",
+            "CMAKE_PREFIX_PATH",
+            "CMAKE_TOOLCHAIN_FILE",
         }
-        clang = self.config.compiler == "clang"
-        cc = "clang" if clang else "gcc"
-        cxx = "clang++" if clang else "g++"
+        env = {key: value for key, value in os.environ.items() if key not in removed}
         tools = {
-            "CC": cc,
-            "CXX": cxx,
-            "AR": "llvm-ar" if clang else "gcc-ar",
-            "RANLIB": "llvm-ranlib" if clang else "gcc-ranlib",
-            "NM": "llvm-nm" if clang else "gcc-nm",
+            "CC": self.toolchain.cc,
+            "CXX": self.toolchain.cxx,
+            "AR": self.toolchain.ar,
+            "RANLIB": self.toolchain.ranlib,
+            "NM": self.toolchain.nm,
+            "LD": self.toolchain.linker,
         }
-        common = CPU_FLAGS[self.tier].copy()
-        link = ["-static-libstdc++"]
-        if "-shared-libgcc" not in self.config.extra_ldflags:
-            link.append("-static-libgcc")
+        if self.toolchain.windres:
+            tools["WINDRES"] = self.toolchain.windres
+        clang = self.toolchain.clang
+        common = list(self.target_info.cpu_flags[self.tier])
+        link = [*self.toolchain.runtime_flags, *self.toolchain.link_flags]
+        if "-shared-libgcc" in self.config.extra_ldflags:
+            link = [flag for flag in link if flag != "-static-libgcc"]
         if clang:
             link.append("-fuse-ld=lld")
-            if not self.windows:
-                gcc_directory = Path(run(["gcc", "-print-libgcc-file-name"], capture=True).stdout.strip()).parent
+            if not self.windows and self.toolchain.compatibility_cc:
+                gcc_directory = Path(
+                    run([self.toolchain.compatibility_cc, "-print-libgcc-file-name"], capture=True).stdout.strip()
+                ).parent
                 common.append(f"--gcc-install-dir={gcc_directory}")
         if self.windows:
             if clang:
-                sysroot = run([f"{TRIPLE}-gcc", "-print-sysroot"], capture=True).stdout.strip()
+                if (
+                    not self.toolchain.host
+                    or not self.toolchain.compatibility_cc
+                    or not self.toolchain.compatibility_cxx
+                ):
+                    raise ValueError(f"Incomplete Windows Clang toolchain: {self.toolchain.name}")
+                sysroot = run([self.toolchain.compatibility_cc, "-print-sysroot"], capture=True).stdout.strip()
                 if (Path(sysroot) / "mingw").is_dir():
                     sysroot = str(Path(sysroot) / "mingw")
-                common += [f"--target={TRIPLE}", f"--sysroot={sysroot}"]
-                libgcc = Path(run([f"{TRIPLE}-gcc", "-print-libgcc-file-name"], capture=True).stdout.strip()).parent
-                link += [f"-L{libgcc}", "-static", "-pthread"]
+                common += [f"--target={self.toolchain.host}", f"--sysroot={sysroot}"]
+                libgcc = Path(
+                    run([self.toolchain.compatibility_cc, "-print-libgcc-file-name"], capture=True).stdout.strip()
+                ).parent
+                link.append(f"-L{libgcc}")
                 # Clang's MinGW discovery does not cover Fedora's RPM directory layout.
-                search = run([f"{TRIPLE}-g++", "-E", "-x", "c++", "-", "-v"], capture=True)
+                search = run([self.toolchain.compatibility_cxx, "-E", "-x", "c++", "-", "-v"], capture=True)
                 includes = search.stderr.split("#include <...> search starts here:")[-1].split("End of search list.")[0]
                 cxx_includes = [
                     arg
@@ -128,10 +166,7 @@ class BuildContext:
                     for arg in ("-isystem", line.strip())
                 ]
             else:
-                tools = {key: f"{TRIPLE}-{value}" for key, value in tools.items()}
-                link += ["-static"]
                 cxx_includes = []
-            tools["WINDRES"] = f"{TRIPLE}-windres"
         else:
             cxx_includes = []
         if self.config.lto:
@@ -148,11 +183,42 @@ class BuildContext:
         )
         return env
 
-    def autotools(self, name: str, source: Path, options: Sequence[str] = ()) -> None:
-        env = self.environment()
-        # Keep configure's own CFLAGS/CXXFLAGS defaults while adding target requirements.
-        env["CC"] += " " + env.pop("CFLAGS")
-        env["CXX"] += " " + env.pop("CXXFLAGS")
+    def environment(self) -> dict[str, str]:
+        return self.build_environment()
+
+    def host_environment(self) -> dict[str, str]:
+        builder = BUILDERS[self.target_info.builder]
+        if self.target_info.name == builder.host_target:
+            return self.build_environment()
+        host_target = target_spec(builder.host_target)
+        toolchain = toolchain_spec(host_target.name, "gcc")
+        flags = list(host_target.cpu_flags["baseline"])
+        env = self.build_environment()
+        env.pop("WINDRES", None)
+        env.update(
+            CC=toolchain.cc,
+            CXX=toolchain.cxx,
+            AR=toolchain.ar,
+            RANLIB=toolchain.ranlib,
+            NM=toolchain.nm,
+            LD=toolchain.linker,
+            CFLAGS=shlex.join(flags),
+            CXXFLAGS=shlex.join(flags),
+            LDFLAGS=shlex.join([*flags, *toolchain.runtime_flags, *toolchain.link_flags]),
+            CPPFLAGS="",
+            PKG_CONFIG_LIBDIR="",
+            PKG_CONFIG_PATH="",
+        )
+        return env
+
+    def autotools(
+        self, name: str, source: Path, options: Sequence[str] = (), *, flags_in_compiler: bool = True
+    ) -> None:
+        env = self.build_environment()
+        if flags_in_compiler:
+            # Keep configure's own CFLAGS/CXXFLAGS defaults while adding target requirements.
+            env["CC"] += " " + env.pop("CFLAGS")
+            env["CXX"] += " " + env.pop("CXXFLAGS")
         if not (source / "configure").exists():
             if (source / "autogen.sh").exists():
                 run(["sh", "autogen.sh"], cwd=source, env=dict(env, NOCONFIGURE="1"))
@@ -167,15 +233,15 @@ class BuildContext:
             "--enable-static",
             *options,
         ]
-        if self.windows:
-            args.append(f"--host={TRIPLE}")
+        if self.toolchain.host:
+            args.append(f"--host={self.toolchain.host}")
         run(args, cwd=build, env=env)
         run(["make", f"-j{self.jobs}"], cwd=build, env=env)
         run(["make", "install"], cwd=build, env=env)
 
     def stage_binaries(self) -> None:
         for executable in self.package.executables:
-            source = self.prefix / "bin" / (executable + (".exe" if self.windows else ""))
+            source = self.prefix / "bin" / (executable + self.target_info.executable_suffix)
             self.stage_binary(source, executable)
 
     def asset(self) -> Path:
@@ -187,7 +253,7 @@ class BuildContext:
     def cmake(
         self, name: str, source: Path, definitions: dict[str, str | bool | int], *, install: bool = False
     ) -> Path:
-        env = self.environment()
+        env = self.build_environment()
         build = self.work / self.tier / name
         options: dict[str, str | bool | int] = {
             "BUILD_SHARED_LIBS": False,
@@ -207,7 +273,7 @@ class BuildContext:
         if self.windows:
             options.update(
                 CMAKE_SYSTEM_NAME="Windows",
-                CMAKE_SYSTEM_PROCESSOR="x86_64",
+                CMAKE_SYSTEM_PROCESSOR=self.target_info.arch,
                 CMAKE_LINK_DEPENDS_USE_LINKER=False,
                 CMAKE_RC_COMPILER=env["WINDRES"],
             )
@@ -239,7 +305,8 @@ def produce(root: Path, package: Package, target: str, jobs: int) -> tuple[Path,
     checks = recipe_checks(recipe, package, target)
     recipe.build(context)
     if context.windows and package.type == "source-build":
-        sysroot = Path(run([f"{TRIPLE}-gcc", "-print-sysroot"], capture=True).stdout.strip())
+        runtime_cc = context.toolchain.compatibility_cc or context.toolchain.cc
+        sysroot = Path(run([runtime_cc, "-print-sysroot"], capture=True).stdout.strip())
         for executable in list(stage.glob("*.exe")):
             imports = run(["objdump", "-p", executable], capture=True).stdout
             for library in re.findall(r"DLL Name: (\S+)", imports):
@@ -251,8 +318,22 @@ def produce(root: Path, package: Package, target: str, jobs: int) -> tuple[Path,
     return stage, checks
 
 
-def builder_image(root: Path, override: str | None = None, release: bool = False) -> str:
-    image = override or tomllib.loads((root / "builder/lock.toml").read_text())["image"]
+def builder_configuration(root: Path, target: str) -> dict[str, str]:
+    backend = target_spec(target).builder
+    lock = tomllib.loads((root / "builder/lock.toml").read_text())
+    if lock.get("schema_version") != 2 or backend not in lock.get("builders", {}):
+        raise ValueError(f"No locked builder for {target}")
+    config = lock["builders"][backend]
+    base, image = config.get("base", ""), config.get("image", "")
+    if not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]*@sha256:[0-9a-f]{64}", base):
+        raise ValueError(f"Builder {backend} needs a pinned base image")
+    if image and not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]*@sha256:[0-9a-f]{64}", image):
+        raise ValueError(f"Builder {backend} image must be pinned by digest")
+    return {"name": backend, "platform": BUILDERS[backend].platform, "base": base, "image": image}
+
+
+def builder_image(root: Path, target: str, override: str | None = None, release: bool = False) -> str:
+    image = override or builder_configuration(root, target)["image"]
     if not image:
         raise ValueError("Set builder/lock.toml image to a qualified digest, or use --image for local testing")
     if release and not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]*@sha256:[0-9a-f]{64}", image):
