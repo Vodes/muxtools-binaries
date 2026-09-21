@@ -12,7 +12,7 @@ dependencies = [
     "py-cpuinfo2>=10,<11",
     "py7zr>=1,<2",
     "pydantic>=2.11,<3",
-    "tombi>=0.7,<1",
+    "tombi>=0.7,<1; sys_platform != 'win32' or platform_machine != 'ARM64'",
     "tomlkit>=0.13,<1",
     "zimtohrli>=0.2.1.post1,<0.3",
     "zstandard>=0.23,<1",

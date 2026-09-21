@@ -70,9 +70,6 @@ def _matrix(root: Path, names: str, changed_from: str | None) -> dict[str, list[
             if parts[0] == "packages" and len(parts) > 2:
                 if parts[1] in packages:
                     changed.add(parts[1])
-                continue
-            changed = set(packages)
-            break
         packages = {name: pkg for name, pkg in packages.items() if name in changed}
     return {
         "include": [

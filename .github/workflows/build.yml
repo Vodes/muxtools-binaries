@@ -45,6 +45,8 @@ jobs:
           if [ "$EVENT" = push ]; then
             if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
               args+=(--changed-from "$BASE")
+            else
+              args+=(--changed-from HEAD)
             fi
           elif [ -n "$BASE" ]; then
             if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then

@@ -58,11 +58,9 @@ Run `uv run pytest -q` for shared tests in `tests/` and package tests in
 
 On PRs, build selection compares against the PR base. On pushes to `main`, it
 compares against the previous branch commit. Changes inside one package select
-that package. Shared source, tests, builder files, binary workflows, or dependency
-configuration select all packages. If the previous push commit is unavailable,
-CI builds all packages.
+that package. Changes outside a package do not select binary builds. If the
+previous push commit is unavailable, CI does not select binary builds.
 
 Documentation pages, `zensical.toml`, the docs workflow, and editor settings do
-not select binary builds. Changes to shared `pyproject.toml` or `uv.lock` still
-select all packages. Manual runs build all packages unless the `packages` input
-selects specific names.
+not select binary builds. Manual runs build all packages unless the `packages`
+input selects specific names.

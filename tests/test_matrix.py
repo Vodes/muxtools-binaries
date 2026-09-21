@@ -56,12 +56,14 @@ def _names(root: Path, changed_from: str | None = None, packages: str = "") -> s
     return {entry["package"] for entry in _matrix(root, packages, changed_from)["include"]}
 
 
-def test_package_change_selects_owner_with_mixed_docs(tmp_path):
+def test_package_change_selects_owner_with_shared_changes(tmp_path):
     root, base = _repo(tmp_path)
     (root / "packages" / "alpha" / "recipe.py").write_text("# changed\n")
+    (root / "src").mkdir()
+    (root / "src" / "shared.py").write_text("shared = True\n")
     (root / "docs").mkdir()
     (root / "docs" / "build.md").write_text("documentation\n")
-    head = _commit(root, "change alpha and docs")
+    head = _commit(root, "change alpha and shared files")
 
     assert _names(root, base) == {"alpha"}
     assert _names(root, head) == set()
@@ -107,14 +109,14 @@ def test_docs_only_and_empty_diff_have_empty_matrix(tmp_path):
         "src/readme.py",
     ],
 )
-def test_shared_change_selects_all_packages(tmp_path, path):
+def test_shared_change_does_not_select_binary_builds(tmp_path, path):
     root, base = _repo(tmp_path)
     shared = root / path
     shared.parent.mkdir(parents=True, exist_ok=True)
     shared.write_text("shared = True\n")
     _commit(root, "change shared runtime")
 
-    assert _names(root, base) == {"alpha", "beta"}
+    assert _names(root, base) == set()
 
 
 def test_deleted_package_does_not_select_remaining_packages(tmp_path):
