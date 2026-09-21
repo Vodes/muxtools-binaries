@@ -65,7 +65,7 @@ On an ARM64 Mac, any package that declares a `macos-arm64` target builds without
 Docker. Install the native build tools, then substitute its package name below:
 
 ```sh
-brew install autoconf automake libtool pkg-config cmake ninja
+brew install autoconf automake libtool pkg-config cmake ninja docbook-xsl libxslt
 uv run muxtools-build build PACKAGE --target macos-arm64
 uv run muxtools-build test dist/PACKAGE-VERSION-macos-arm64.tar.zst
 ```

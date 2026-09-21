@@ -1,5 +1,6 @@
 import re
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -54,6 +55,24 @@ def _static_iconv(ctx: BuildContext, source: Path) -> None:
     ctx.autotools("iconv", source, ["--disable-nls"])
 
 
+def _fix_vorbis_darwin_flags(source: Path) -> None:
+    configure_ac = source / "configure.ac"
+    contents = configure_ac.read_text()
+    obsolete = " -force_cpusubtype_ALL"
+    if contents.count(obsolete) != 3:
+        raise ValueError("Cannot locate Vorbis's obsolete Darwin compiler flags")
+    configure_ac.write_text(contents.replace(obsolete, ""))
+
+
+def _fix_qt_arm_intrinsics(source: Path) -> None:
+    header = source / "src" / "corelib" / "thread" / "qyieldcpu.h"
+    contents = header.read_text()
+    marker = "#include <QtCore/qtconfigmacros.h>\n"
+    if contents.count(marker) != 1:
+        raise ValueError("Cannot locate Qt's qyieldcpu include block")
+    header.write_text(contents.replace(marker, marker + "\n#include <arm_acle.h>\n"))
+
+
 def _static_zstd(ctx: BuildContext, source: Path) -> None:
     ctx.cmake(
         "zstd",
@@ -103,6 +122,8 @@ def _build_boost(ctx: BuildContext, source: Path) -> None:
 
 
 def _build_qt(ctx: BuildContext, source: Path) -> Path:
+    if ctx.target_info.os == "macos" and ctx.target_info.arch == "arm64":
+        _fix_qt_arm_intrinsics(source)
     target_env = ctx.environment()
     host_prefix = ctx.work / ctx.tier / "qt-host-prefix"
     if ctx.windows:
@@ -121,6 +142,10 @@ def _build_qt(ctx: BuildContext, source: Path) -> Path:
     target_build.mkdir(parents=True, exist_ok=True)
     options: list[str | Path] = [*(_QT_OPTIONS), "-prefix", ctx.prefix]
     if ctx.windows:
+        compiler_name = "clang" if ctx.toolchain.clang else "gcc"
+        if not ctx.toolchain.cc.endswith(compiler_name):
+            raise ValueError(f"Cannot derive Qt cross-compiler prefix from {ctx.toolchain.cc}")
+        cross_compile = ctx.toolchain.cc.removesuffix(compiler_name)
         toolchain = ctx.work / ctx.tier / "qt-mingw-toolchain.cmake"
         toolchain.write_text(
             "set(CMAKE_SYSTEM_NAME Windows)\n"
@@ -137,9 +162,9 @@ def _build_qt(ctx: BuildContext, source: Path) -> Path:
         )
         options += [
             "-xplatform",
-            "win32-g++",
+            "win32-clang-g++" if ctx.toolchain.clang else "win32-g++",
             "-device-option",
-            f"CROSS_COMPILE={ctx.toolchain.host}-",
+            f"CROSS_COMPILE={cross_compile}",
             "-qt-host-path",
             host_prefix,
             "--",
@@ -202,7 +227,7 @@ def _use_static_libstdcpp(source: Path) -> None:
 
 
 def _build_mkvtoolnix(ctx: BuildContext, source: Path, qmake: Path) -> None:
-    if not ctx.windows:
+    if ctx.target_info.os == "linux":
         _use_static_libstdcpp(source)
     env = ctx.environment()
     env.update(
@@ -226,9 +251,25 @@ def _build_mkvtoolnix(ctx: BuildContext, source: Path, qmake: Path) -> None:
         f"--with-extra-includes={ctx.prefix / 'include'}",
         f"--with-extra-libs={ctx.prefix / 'lib'}",
     ]
+    if ctx.target_info.os == "macos":
+        docbook = getattr(run(["brew", "--prefix", "docbook-xsl"], capture=True), "stdout", "").strip()
+        libxslt = getattr(run(["brew", "--prefix", "libxslt"], capture=True), "stdout", "").strip()
+        if not docbook or not libxslt:
+            raise ValueError("Homebrew did not report the DocBook XSL or libxslt prefix")
+        options += [
+            f"--with-docbook-xsl-root={Path(docbook) / 'docbook-xsl'}",
+            f"--with-xsltproc={Path(libxslt) / 'bin' / 'xsltproc'}",
+        ]
     if ctx.windows:
         options.append(f"--host={ctx.toolchain.host}")
-    result = run(options, cwd=source, env=env, capture=True)
+    try:
+        result = run(options, cwd=source, env=env, capture=True)
+    except subprocess.CalledProcessError as error:
+        if error.stdout:
+            print(error.stdout, end="")
+        if error.stderr:
+            print(error.stderr, end="", file=sys.stderr)
+        raise
     summary = getattr(result, "stdout", "")
     if summary:
         print(summary, end="")
@@ -246,7 +287,12 @@ def build(ctx: BuildContext) -> None:
     if ctx.windows:
         _static_iconv(ctx, ctx.source("iconv", dependencies["iconv"]))
     ctx.autotools("ogg", ctx.source("ogg", dependencies["ogg"]))
-    ctx.autotools("vorbis", ctx.source("vorbis", dependencies["vorbis"]))
+    vorbis = ctx.source("vorbis", dependencies["vorbis"])
+    if ctx.target_info.os == "macos":
+        # Vorbis 1.3.7 injects this removed Darwin option even when the caller supplies
+        # CFLAGS; current Apple Clang forwards it to ld, which rejects it.
+        _fix_vorbis_darwin_flags(vorbis)
+    ctx.autotools("vorbis", vorbis)
     ctx.autotools("flac", ctx.source("flac", dependencies["flac"]), ["--disable-doxygen-docs", "--disable-cpplibs"])
     _static_gmp(ctx, ctx.source("gmp", dependencies["gmp"]))
     _build_boost(ctx, ctx.source("boost", dependencies["boost"]))

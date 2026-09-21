@@ -67,12 +67,33 @@ extra_ldflags = ["-shared-libgcc"]
 [targets.linux-x86_64.runtime]
 requirements = ["libgcc_s.so.1"]
 
+[targets.linux-arm64]
+toolchain = "gcc"
+lto = false
+cpu_levels = ["baseline"]
+extra_ldflags = ["-shared-libgcc"]
+
+[targets.linux-arm64.runtime]
+requirements = ["libgcc_s.so.1"]
+
 [targets.windows-x86_64]
 toolchain = "gcc"
 lto = false
 cpu_levels = ["baseline"]
 extra_cflags = ["-DFLAC__NO_DLL"]
 extra_cxxflags = ["-DFLAC__NO_DLL"]
+
+[targets.windows-arm64]
+toolchain = "clang"
+lto = false
+cpu_levels = ["baseline"]
+extra_cflags = ["-DFLAC__NO_DLL"]
+extra_cxxflags = ["-DFLAC__NO_DLL"]
+
+[targets.macos-arm64]
+toolchain = "clang"
+lto = false
+cpu_levels = ["baseline"]
 
 [executables]
 mkvmerge = ["--version"]

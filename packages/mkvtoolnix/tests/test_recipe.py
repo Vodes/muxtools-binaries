@@ -25,6 +25,10 @@ def _mock_build(ctx, monkeypatch, tmp_path):
     for source in sources.values():
         source.mkdir()
     (sources["mkvtoolnix"] / "Rakefile").write_text('  "-lstdc++",\n')
+    (sources["vorbis"] / "configure.ac").write_text("CFLAGS=' -force_cpusubtype_ALL'\n" * 3)
+    qt_header = sources["qtbase"] / "src/corelib/thread/qyieldcpu.h"
+    qt_header.parent.mkdir(parents=True)
+    qt_header.write_text("#include <QtCore/qtconfigmacros.h>\n")
     calls = []
 
     monkeypatch.setattr(ctx, "source", lambda name, pin: sources[name])
@@ -46,6 +50,10 @@ def _mock_build(ctx, monkeypatch, tmp_path):
     def fake_run(args, **kwargs):
         command = [str(arg) for arg in args]
         calls.append((command, kwargs))
+        if command == ["brew", "--prefix", "docbook-xsl"]:
+            return SimpleNamespace(stdout="/opt/homebrew/opt/docbook-xsl\n")
+        if command == ["brew", "--prefix", "libxslt"]:
+            return SimpleNamespace(stdout="/opt/homebrew/opt/libxslt\n")
         if command and Path(command[0]).name == "configure" and kwargs.get("cwd") == sources["mkvtoolnix"]:
             (sources["mkvtoolnix"] / "build-config").write_text(
                 "\n".join(
@@ -88,11 +96,17 @@ def test_manifest_is_source_build_with_pinned_minimal_dependencies():
     assert package.source.tag == "release-102.0"
     assert package.version_code == 3
     assert package.targets["linux-x86_64"].asset is None
+    assert package.targets["linux-arm64"].toolchain == "gcc"
     assert package.targets["windows-x86_64"].asset is None
+    assert package.targets["windows-arm64"].toolchain == "clang"
+    assert package.targets["macos-arm64"].toolchain == "clang"
     assert "-shared-libgcc" in package.targets["linux-x86_64"].extra_ldflags
     assert package.targets["linux-x86_64"].runtime.requirements == ["libgcc_s.so.1"]
+    assert "-shared-libgcc" in package.targets["linux-arm64"].extra_ldflags
+    assert package.targets["linux-arm64"].runtime.requirements == ["libgcc_s.so.1"]
     assert "-DFLAC__NO_DLL" in package.targets["windows-x86_64"].extra_cflags
     assert "-DFLAC__NO_DLL" in package.targets["windows-x86_64"].extra_cxxflags
+    assert "-DFLAC__NO_DLL" in package.targets["windows-arm64"].extra_cflags
     assert {"zlib", "zstd", "ogg", "vorbis", "flac", "boost", "qtbase", "gmp", "iconv"} == set(package.dependencies)
 
 
@@ -150,6 +164,37 @@ def test_windows_build_bootstraps_native_qt_tools_and_cross_compiles_target(tmp_
     assert "--enable-static" not in mkv_configure[0]
     assert mkv_configure[1]["env"]["CC"] == "x86_64-w64-mingw32-gcc"
     assert (sources["mkvtoolnix"] / "Rakefile").read_text() == '  "-lstdc++",\n'
+
+
+def test_windows_arm64_build_uses_qt_clang_spec(tmp_path, monkeypatch):
+    ctx = _context(tmp_path, "windows-arm64")
+    calls, _ = _mock_build(ctx, monkeypatch, tmp_path)
+
+    recipe.build(ctx)
+
+    qt_configures = [
+        entry for entry in calls if isinstance(entry[0], list) and "-qt-host-path" in entry[0]
+    ]
+    assert len(qt_configures) == 1
+    xplatform = qt_configures[0][0].index("-xplatform")
+    assert qt_configures[0][0][xplatform + 1] == "win32-clang-g++"
+    assert "CROSS_COMPILE=/opt/llvm-mingw/bin/aarch64-w64-mingw32-" in qt_configures[0][0]
+
+
+def test_macos_build_keeps_native_cxx_runtime_linking(tmp_path, monkeypatch):
+    ctx = _context(tmp_path, "macos-arm64")
+    calls, sources = _mock_build(ctx, monkeypatch, tmp_path)
+
+    recipe.build(ctx)
+
+    assert "force_cpusubtype_ALL" not in (sources["vorbis"] / "configure.ac").read_text()
+    assert "#include <arm_acle.h>" in (sources["qtbase"] / "src/corelib/thread/qyieldcpu.h").read_text()
+    assert (sources["mkvtoolnix"] / "Rakefile").read_text() == '  "-lstdc++",\n'
+    mkv_configure = next(entry for entry in calls if isinstance(entry[0], list) and "--disable-gui" in entry[0])
+    assert mkv_configure[1]["env"]["CC"] == "clang"
+    assert "--with-docbook-xsl-root=/opt/homebrew/opt/docbook-xsl/docbook-xsl" in mkv_configure[0]
+    assert "--with-xsltproc=/opt/homebrew/opt/libxslt/bin/xsltproc" in mkv_configure[0]
+    assert not any(entry[:2] == ("autotools", "iconv") for entry in calls)
 
 
 def test_checks_and_release_update():
