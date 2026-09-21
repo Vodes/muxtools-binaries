@@ -77,12 +77,13 @@ target and CPU level. A custom recipe controls its own dependency steps.
 
 ## Target settings
 
-The registered target names are `linux-x86_64`, `windows-x86_64`, and `linux-arm64`. There is no
-top-level target-default table. Declare each target separately.
+The registered target names are `linux-x86_64`, `windows-x86_64`, `linux-arm64`,
+and `windows-arm64`. There is no top-level target-default table. Declare each
+target separately.
 
 | Field in `[targets.<target>]` | Type | Default | Meaning and limits |
 | --- | --- | --- | --- |
-| `toolchain` | String | `"gcc"` | Target-scoped toolchain, currently `gcc` or `clang`. |
+| `toolchain` | String | `"gcc"` | Target-scoped toolchain: `gcc`, `clang`, or Windows-only `clang-msvc`. Windows ARM64 does not support `gcc`. |
 | `lto` | Boolean false or string | `false` | `false`, `"full"`, or `"thin"`. Thin LTO requires Clang. `true` is not accepted. |
 | `cpu_levels` | String array | `["baseline"]` | Unique entries, with `baseline` first. x86-64 also supports `avx2`, `avx512`, and `zn4`; ARM64 is baseline-only. Imports must use only `baseline`. |
 | `extra_cflags` | String array | `[]` | Extra C compiler arguments. |
@@ -237,6 +238,10 @@ it also supplies the system name, processor, resource compiler, and link-depende
 setting. Those helper-owned values override definitions from `build.cmake`.
 Other definition names pass through to CMake; schema validation does not catch
 misspelled upstream CMake variables.
+
+For a package using the Windows `clang-msvc` toolchain, pass `clang_cl=True` to
+`ctx.cmake(...)` only when upstream expects the cl-compatible frontend. The
+default remains normal `clang`/`clang++` syntax. Other toolchains reject this option.
 
 ### FFmpeg
 

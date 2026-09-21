@@ -1,15 +1,20 @@
 # muxtools-binaries
 
-Portable command-line tools for Linux and Windows x86-64.<br>
+Portable command-line tools for Linux and Windows on x86-64 and ARM64.<br>
+Linux and Windows (x86_64) are the only first-class targets. Everything else is provided on a best effort basis.<br>
 Available packages are listed on the documention linked below. (Or just check the packages folder)
 
 [Documentation](https://vodes.github.io/muxtools-binaries/) ·
 [Downloads](https://github.com/Vodes/muxtools-binaries/releases) ·
 [Package setup](docs/packages/adding-a-package.md)
 
-Source builds use a shared Linux builder image. Windows builds use MinGW.
-Linux source builds require x86-64-v2 and glibc 2.34. x265 also includes
-AVX2, AVX512, and Zen 4 variants. Imported tools can have extra runtime requirements.
+Source builds use architecture-specific Linux builder images. Windows builds use
+MinGW or the MSVC ABI through Clang.
+Linux source builds require x86-64-v2 and glibc 2.34.<br>
+Some builds, x265 for example, also include AVX2, AVX512, and (a cut down) Zen 4 variants.<br>
+
+Imported tools can have extra runtime requirements.<br>
+This is, in most cases, going to be limited to `libgcc_s` which should not be a problem.
 
 ## Development
 

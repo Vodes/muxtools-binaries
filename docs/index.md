@@ -5,7 +5,7 @@ render_macros: true
 # muxtools-binaries
 
 This project builds and packages portable command-line tools for Linux and Windows
-x86-64, with opt-in Linux ARM64 targets.
+on x86-64, with opt-in ARM64 targets.
 
 | Task | Start here |
 | --- | --- |

@@ -9,7 +9,7 @@ from pathlib import Path
 
 from pydantic import Field
 
-from .checks import CheckSuite
+from .checks import CheckSuite, reject_static_windows_runtimes
 from .io import download, extract, run
 from .models import ArchiveSource, GitSource, Model, Package
 from .recipes import load_recipe, recipe_checks, recipe_options
@@ -19,6 +19,16 @@ from .targets import BUILDERS, target_spec, toolchain_spec
 class AutotoolsOptions(Model):
     configure: list[str] = Field(default_factory=list)
     dependencies: dict[str, list[str]] = Field(default_factory=dict)
+
+
+def _needs_mingw_host(source: Path) -> bool:
+    for name in ("configure.ac", "configure.in"):
+        path = source / name
+        if path.is_file():
+            text = path.read_text().casefold()
+            if "host_os" in text and "mingw" in text and "msvc" not in text:
+                return True
+    return False
 
 
 def build_autotools(ctx: "BuildContext") -> None:
@@ -103,6 +113,7 @@ class BuildContext:
             "LD",
             "RANLIB",
             "WINDRES",
+            "RC",
             "CFLAGS",
             "CXXFLAGS",
             "CPPFLAGS",
@@ -111,6 +122,11 @@ class BuildContext:
             "C_INCLUDE_PATH",
             "CPLUS_INCLUDE_PATH",
             "LIBRARY_PATH",
+            "INCLUDE",
+            "LIB",
+            "CL",
+            "_CL_",
+            "RCFLAGS",
             "PKG_CONFIG_PATH",
             "PKG_CONFIG_LIBDIR",
             "PKG_CONFIG_SYSROOT_DIR",
@@ -128,59 +144,32 @@ class BuildContext:
         }
         if self.toolchain.windres:
             tools["WINDRES"] = self.toolchain.windres
-        clang = self.toolchain.clang
-        common = list(self.target_info.cpu_flags[self.tier])
-        link = [*self.toolchain.runtime_flags, *self.toolchain.link_flags]
+            tools["RC"] = self.toolchain.windres
+        common = [*self.target_info.cpu_flags[self.tier], *self.toolchain.default_cflags]
+        cxx = list(self.toolchain.default_cxxflags)
+        link = list(self.toolchain.default_ldflags)
         if "-shared-libgcc" in self.config.extra_ldflags:
             link = [flag for flag in link if flag != "-static-libgcc"]
-        if clang:
-            link.append("-fuse-ld=lld")
-            if not self.windows and self.toolchain.compatibility_cc:
-                gcc_directory = Path(
-                    run([self.toolchain.compatibility_cc, "-print-libgcc-file-name"], capture=True).stdout.strip()
-                ).parent
-                common.append(f"--gcc-install-dir={gcc_directory}")
-        if self.windows:
-            if clang:
-                if (
-                    not self.toolchain.host
-                    or not self.toolchain.compatibility_cc
-                    or not self.toolchain.compatibility_cxx
-                ):
-                    raise ValueError(f"Incomplete Windows Clang toolchain: {self.toolchain.name}")
-                sysroot = run([self.toolchain.compatibility_cc, "-print-sysroot"], capture=True).stdout.strip()
-                if (Path(sysroot) / "mingw").is_dir():
-                    sysroot = str(Path(sysroot) / "mingw")
-                common += [f"--target={self.toolchain.host}", f"--sysroot={sysroot}"]
-                libgcc = Path(
-                    run([self.toolchain.compatibility_cc, "-print-libgcc-file-name"], capture=True).stdout.strip()
-                ).parent
-                link.append(f"-L{libgcc}")
-                # Clang's MinGW discovery does not cover Fedora's RPM directory layout.
-                search = run([self.toolchain.compatibility_cxx, "-E", "-x", "c++", "-", "-v"], capture=True)
-                includes = search.stderr.split("#include <...> search starts here:")[-1].split("End of search list.")[0]
-                cxx_includes = [
-                    arg
-                    for line in includes.splitlines()
-                    if Path(line.strip()).is_dir() and "/c++" in line
-                    for arg in ("-isystem", line.strip())
-                ]
-            else:
-                cxx_includes = []
-        else:
-            cxx_includes = []
+        if not self.windows and self.toolchain.clang and self.toolchain.compatibility_cc:
+            gcc_directory = Path(
+                run([self.toolchain.compatibility_cc, "-print-libgcc-file-name"], capture=True).stdout.strip()
+            ).parent
+            common.append(f"--gcc-install-dir={gcc_directory}")
         if self.config.lto:
             common += ["-flto=thin" if self.config.lto == "thin" else "-flto"]
         env.update(tools)
         env.update(
             CFLAGS=shlex.join(common + self.config.extra_cflags),
-            CXXFLAGS=shlex.join(common + cxx_includes + self.config.extra_cxxflags),
+            CXXFLAGS=shlex.join(common + cxx + self.config.extra_cxxflags),
             LDFLAGS=shlex.join(common + link + [f"-L{self.prefix / 'lib'}"] + self.config.extra_ldflags),
             CPPFLAGS=shlex.join([f"-I{self.prefix / 'include'}"]),
             PKG_CONFIG_LIBDIR=str(self.prefix / "lib/pkgconfig"),
             PKG_CONFIG_PATH="",
+            PKG_CONFIG_SYSROOT_DIR="",
             SOURCE_DATE_EPOCH="0",
         )
+        if self.toolchain.rcflags:
+            env["RCFLAGS"] = shlex.join(self.toolchain.rcflags)
         return env
 
     def environment(self) -> dict[str, str]:
@@ -194,7 +183,8 @@ class BuildContext:
         toolchain = toolchain_spec(host_target.name, "gcc")
         flags = list(host_target.cpu_flags["baseline"])
         env = self.build_environment()
-        env.pop("WINDRES", None)
+        for name in ("WINDRES", "RC", "RCFLAGS"):
+            env.pop(name, None)
         env.update(
             CC=toolchain.cc,
             CXX=toolchain.cxx,
@@ -204,7 +194,7 @@ class BuildContext:
             LD=toolchain.linker,
             CFLAGS=shlex.join(flags),
             CXXFLAGS=shlex.join(flags),
-            LDFLAGS=shlex.join([*flags, *toolchain.runtime_flags, *toolchain.link_flags]),
+            LDFLAGS=shlex.join([*flags, *toolchain.default_ldflags]),
             CPPFLAGS="",
             PKG_CONFIG_LIBDIR="",
             PKG_CONFIG_PATH="",
@@ -233,8 +223,11 @@ class BuildContext:
             "--enable-static",
             *options,
         ]
-        if self.toolchain.host:
-            args.append(f"--host={self.toolchain.host}")
+        configure_host = self.toolchain.host
+        if configure_host and self.toolchain.abi == "msvc" and _needs_mingw_host(source):
+            configure_host = f"{configure_host.partition('-')[0]}-w64-mingw32"
+        if configure_host:
+            args.append(f"--host={configure_host}")
         run(args, cwd=build, env=env)
         run(["make", f"-j{self.jobs}"], cwd=build, env=env)
         run(["make", "install"], cwd=build, env=env)
@@ -251,15 +244,32 @@ class BuildContext:
         return download(asset.url, asset.sha256, self.cache)
 
     def cmake(
-        self, name: str, source: Path, definitions: dict[str, str | bool | int], *, install: bool = False
+        self,
+        name: str,
+        source: Path,
+        definitions: dict[str, str | bool | int],
+        *,
+        install: bool = False,
+        clang_cl: bool = False,
     ) -> Path:
+        if clang_cl and self.toolchain.abi != "msvc":
+            raise ValueError("clang_cl=True requires the clang-msvc toolchain")
         env = self.build_environment()
+        if clang_cl:
+            env.update(self._clang_cl_environment())
         build = self.work / self.tier / name
         options: dict[str, str | bool | int] = {
             "BUILD_SHARED_LIBS": False,
             "CMAKE_BUILD_TYPE": "Release",
             "CMAKE_INSTALL_LIBDIR": "lib",
             "CMAKE_PREFIX_PATH": str(self.prefix),
+            "CMAKE_FIND_ROOT_PATH": f"{self.prefix};{self.toolchain.sysroot or ''}",
+            "CMAKE_FIND_ROOT_PATH_MODE_PROGRAM": "NEVER",
+            "CMAKE_FIND_ROOT_PATH_MODE_LIBRARY": "ONLY",
+            "CMAKE_FIND_ROOT_PATH_MODE_INCLUDE": "ONLY",
+            "CMAKE_FIND_ROOT_PATH_MODE_PACKAGE": "ONLY",
+            "CMAKE_FIND_USE_PACKAGE_REGISTRY": False,
+            "CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY": False,
             **definitions,
         }
         options.update(
@@ -273,9 +283,18 @@ class BuildContext:
         if self.windows:
             options.update(
                 CMAKE_SYSTEM_NAME="Windows",
-                CMAKE_SYSTEM_PROCESSOR=self.target_info.arch,
+                CMAKE_SYSTEM_PROCESSOR="ARM64" if self.target_info.arch == "arm64" else "AMD64",
                 CMAKE_LINK_DEPENDS_USE_LINKER=False,
                 CMAKE_RC_COMPILER=env["WINDRES"],
+            )
+        if self.toolchain.abi == "msvc":
+            options.update(
+                CMAKE_LINKER=self.toolchain.linker,
+                CMAKE_MT=self.toolchain.mt or "",
+                CMAKE_MSVC_RUNTIME_LIBRARY="MultiThreaded",
+                CMAKE_POLICY_DEFAULT_CMP0091="NEW",
+                CMAKE_C_COMPILER_TARGET=self.toolchain.host or "",
+                CMAKE_CXX_COMPILER_TARGET=self.toolchain.host or "",
             )
         args = [
             f"-D{key}={'ON' if value is True else 'OFF' if value is False else value}" for key, value in options.items()
@@ -285,6 +304,34 @@ class BuildContext:
         if install:
             run(["cmake", "--install", build], env=env)
         return build
+
+    def _clang_cl_environment(self) -> dict[str, str]:
+        if not self.toolchain.host or not self.toolchain.sysroot or not self.toolchain.windres:
+            raise ValueError("Incomplete clang-msvc toolchain")
+        common = [
+            *(f"/clang:{flag}" for flag in self.target_info.cpu_flags[self.tier]),
+            f"--target={self.toolchain.host}",
+            "/winsysroot",
+            self.toolchain.sysroot,
+            "/MT",
+        ]
+        if self.config.lto:
+            common.append("/clang:-flto=thin" if self.config.lto == "thin" else "/clang:-flto")
+        library_paths = [f"/libpath:{flag[2:]}" for flag in self.toolchain.default_ldflags if flag.startswith("-L")]
+        return {
+            "CC": "/opt/llvm-mingw/bin/clang-cl",
+            "CXX": "/opt/llvm-mingw/bin/clang-cl",
+            "AR": "/opt/llvm-mingw/bin/llvm-lib",
+            "RANLIB": self.toolchain.ranlib,
+            "NM": self.toolchain.nm,
+            "LD": self.toolchain.linker,
+            "WINDRES": "/opt/llvm-mingw/bin/llvm-rc",
+            "RC": "/opt/llvm-mingw/bin/llvm-rc",
+            "CFLAGS": shlex.join([*common, *self.config.extra_cflags]),
+            "CXXFLAGS": shlex.join([*common, "/EHsc", *self.config.extra_cxxflags]),
+            "LDFLAGS": shlex.join([f"/libpath:{self.prefix / 'lib'}", *library_paths, *self.config.extra_ldflags]),
+            "CPPFLAGS": shlex.join([f"/I{self.prefix / 'include'}"]),
+        }
 
     def stage_binary(self, source: Path, executable: str) -> None:
         destination = self.stage / self.package.binaries(self.target)[executable][self.tier]
@@ -305,23 +352,27 @@ def produce(root: Path, package: Package, target: str, jobs: int) -> tuple[Path,
     checks = recipe_checks(recipe, package, target)
     recipe.build(context)
     if context.windows and package.type == "source-build":
-        runtime_cc = context.toolchain.compatibility_cc or context.toolchain.cc
-        sysroot = Path(run([runtime_cc, "-print-sysroot"], capture=True).stdout.strip())
         for executable in list(stage.glob("*.exe")):
             imports = run(["objdump", "-p", executable], capture=True).stdout
-            for library in re.findall(r"DLL Name: (\S+)", imports):
-                if library.lower().startswith(("libgcc", "libstdc++", "libwinpthread")):
+            libraries = re.findall(r"DLL Name: (\S+)", imports)
+            if context.toolchain.abi == "mingw-gcc":
+                sysroot = Path(run([context.toolchain.cc, "-print-sysroot"], capture=True).stdout.strip())
+                for library in libraries:
+                    if not library.lower().startswith(("libgcc", "libstdc++", "libwinpthread")):
+                        continue
                     matches = list(sysroot.rglob(library))
                     if len(matches) != 1:
                         raise ValueError(f"Cannot locate compiler runtime {library}")
                     shutil.copy2(matches[0], stage / library)
+            else:
+                reject_static_windows_runtimes(libraries, context.toolchain.abi, executable.name)
     return stage, checks
 
 
 def builder_configuration(root: Path, target: str) -> dict[str, str]:
     backend = target_spec(target).builder
     lock = tomllib.loads((root / "builder/lock.toml").read_text())
-    if lock.get("schema_version") != 2 or backend not in lock.get("builders", {}):
+    if lock.get("schema_version") != 3 or backend not in lock.get("builders", {}):
         raise ValueError(f"No locked builder for {target}")
     config = lock["builders"][backend]
     base, image = config.get("base", ""), config.get("image", "")

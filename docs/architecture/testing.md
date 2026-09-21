@@ -14,8 +14,9 @@ Declare wrappers and private executables in
 
 ## Native tests
 
-Linux x86-64 jobs use Ubuntu 24.04, Linux ARM64 jobs use Ubuntu 24.04 ARM,
-and Windows jobs use Windows Server 2022.
+Linux x86-64 jobs use Ubuntu 24.04, Linux and Windows ARM64 builds use Ubuntu
+24.04 ARM, and Windows x86-64 builds use Ubuntu 24.04. Windows smoke tests run
+on Windows Server 2022 for x86-64 and native `windows-11-arm` runners for ARM64.
 The runner extracts each archive into a path that contains spaces. It invokes
 every baseline executable and runs the recipe's functional checks.
 

@@ -5,6 +5,7 @@ from typing import Literal
 type OperatingSystem = Literal["linux", "windows", "macos"]
 type Architecture = Literal["x86_64", "arm64"]
 type BinaryFormat = Literal["elf", "pe", "macho"]
+type ToolchainABI = Literal["native", "mingw-gcc", "mingw-ucrt", "msvc"]
 
 
 @dataclass(frozen=True)
@@ -40,12 +41,16 @@ class ToolchainSpec:
     nm: str
     linker: str
     family: Literal["gcc", "clang"]
+    abi: ToolchainABI = "native"
     host: str | None = None
+    sysroot: str | None = None
     windres: str | None = None
+    mt: str | None = None
     compatibility_cc: str | None = None
-    compatibility_cxx: str | None = None
-    runtime_flags: tuple[str, ...] = ()
-    link_flags: tuple[str, ...] = ()
+    default_cflags: tuple[str, ...] = ()
+    default_cxxflags: tuple[str, ...] = ()
+    default_ldflags: tuple[str, ...] = ()
+    rcflags: tuple[str, ...] = ()
 
     @property
     def clang(self) -> bool:
@@ -101,6 +106,17 @@ TARGETS = {
         elf_machine=183,
         interpreter="ld-linux-aarch64.so.1",
     ),
+    "windows-arm64": TargetSpec(
+        "windows-arm64",
+        "windows",
+        "arm64",
+        "pe",
+        "ubuntu-24.04-arm",
+        "windows-11-arm",
+        "manylinux-arm64",
+        ARM64_CPU_FLAGS,
+        executable_suffix=".exe",
+    ),
 }
 
 
@@ -116,7 +132,7 @@ def _native_toolchains(target: str) -> dict[str, ToolchainSpec]:
             "gcc-nm",
             "ld",
             "gcc",
-            runtime_flags=("-static-libstdc++", "-static-libgcc"),
+            default_ldflags=("-static-libstdc++", "-static-libgcc"),
         ),
         "clang": ToolchainSpec(
             "clang",
@@ -129,13 +145,92 @@ def _native_toolchains(target: str) -> dict[str, ToolchainSpec]:
             "ld.lld",
             "clang",
             compatibility_cc="gcc",
-            compatibility_cxx="g++",
-            runtime_flags=("-static-libstdc++", "-static-libgcc"),
+            default_ldflags=("-static-libstdc++", "-static-libgcc", "-fuse-ld=lld"),
         ),
     }
 
 
+LLVM_MINGW_ROOT = "/opt/llvm-mingw"
+XWIN_ROOT = "/opt/xwin"
+XWIN_CRT = "14.44.17.14"
+XWIN_SDK = "10.0.26100"
+
+
+def _llvm_tool(name: str) -> str:
+    return f"{LLVM_MINGW_ROOT}/bin/{name}"
+
+
+def _llvm_mingw(target: str, triple: str) -> ToolchainSpec:
+    sysroot = f"{LLVM_MINGW_ROOT}/{triple}"
+    return ToolchainSpec(
+        "clang",
+        target,
+        _llvm_tool(f"{triple}-clang"),
+        _llvm_tool(f"{triple}-clang++"),
+        _llvm_tool(f"{triple}-ar"),
+        _llvm_tool(f"{triple}-ranlib"),
+        _llvm_tool(f"{triple}-nm"),
+        _llvm_tool(f"{triple}-ld"),
+        "clang",
+        abi="mingw-ucrt",
+        host=triple,
+        sysroot=sysroot,
+        windres=_llvm_tool(f"{triple}-windres"),
+        default_cflags=(f"--target={triple}", f"--sysroot={sysroot}"),
+        default_ldflags=(
+            "-static-libstdc++",
+            "-static-libgcc",
+            "-static",
+            "-Wl,-Bstatic",
+            "-pthread",
+            "-fuse-ld=lld",
+        ),
+    )
+
+
+def _msvc_paths(arch: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    ms_arch = "arm64" if arch == "arm64" else "x64"
+    include_root = f"{XWIN_ROOT}/WindowsKits/10/Include/{XWIN_SDK}"
+    includes = (
+        f"{XWIN_ROOT}/VC/Tools/MSVC/{XWIN_CRT}/include",
+        f"{include_root}/ucrt",
+        f"{include_root}/shared",
+        f"{include_root}/um",
+    )
+    libraries = (
+        f"{XWIN_ROOT}/VC/Tools/MSVC/{XWIN_CRT}/lib/{ms_arch}",
+        f"{XWIN_ROOT}/WindowsKits/10/Lib/{XWIN_SDK}/ucrt/{ms_arch}",
+        f"{XWIN_ROOT}/WindowsKits/10/Lib/{XWIN_SDK}/um/{ms_arch}",
+    )
+    return includes, libraries
+
+
+def _clang_msvc(target: str, arch: str, triple: str) -> ToolchainSpec:
+    includes, libraries = _msvc_paths(arch)
+    include_flags = tuple(flag for path in includes for flag in ("-isystem", path))
+    return ToolchainSpec(
+        "clang-msvc",
+        target,
+        _llvm_tool("clang"),
+        _llvm_tool("clang++"),
+        _llvm_tool("llvm-ar"),
+        _llvm_tool("llvm-ranlib"),
+        _llvm_tool("llvm-nm"),
+        _llvm_tool("lld-link"),
+        "clang",
+        abi="msvc",
+        host=triple,
+        sysroot=XWIN_ROOT,
+        windres=_llvm_tool("llvm-windres"),
+        mt="/usr/bin/llvm-mt",
+        default_cflags=(f"--target={triple}", "-fms-runtime-lib=static", *include_flags),
+        default_ldflags=("-fms-runtime-lib=static", "-fuse-ld=lld", *(f"-L{path}" for path in libraries)),
+        rcflags=tuple(f"-I{path}" for path in includes),
+    )
+
+
 MINGW_TRIPLE = "x86_64-w64-mingw32"
+ARM64_MINGW_TRIPLE = "aarch64-w64-mingw32"
 TOOLCHAINS = {
     "linux-x86_64": _native_toolchains("linux-x86_64"),
     "linux-arm64": _native_toolchains("linux-arm64"),
@@ -150,28 +245,17 @@ TOOLCHAINS = {
             f"{MINGW_TRIPLE}-gcc-nm",
             f"{MINGW_TRIPLE}-ld",
             "gcc",
+            abi="mingw-gcc",
             host=MINGW_TRIPLE,
             windres=f"{MINGW_TRIPLE}-windres",
-            runtime_flags=("-static-libstdc++", "-static-libgcc"),
-            link_flags=("-static",),
+            default_ldflags=("-static-libstdc++", "-static-libgcc", "-static"),
         ),
-        "clang": ToolchainSpec(
-            "clang",
-            "windows-x86_64",
-            "clang",
-            "clang++",
-            "llvm-ar",
-            "llvm-ranlib",
-            "llvm-nm",
-            "ld.lld",
-            "clang",
-            host=MINGW_TRIPLE,
-            windres=f"{MINGW_TRIPLE}-windres",
-            compatibility_cc=f"{MINGW_TRIPLE}-gcc",
-            compatibility_cxx=f"{MINGW_TRIPLE}-g++",
-            runtime_flags=("-static-libstdc++", "-static-libgcc"),
-            link_flags=("-static", "-pthread"),
-        ),
+        "clang": _llvm_mingw("windows-x86_64", MINGW_TRIPLE),
+        "clang-msvc": _clang_msvc("windows-x86_64", "x86_64", "x86_64-pc-windows-msvc"),
+    },
+    "windows-arm64": {
+        "clang": _llvm_mingw("windows-arm64", ARM64_MINGW_TRIPLE),
+        "clang-msvc": _clang_msvc("windows-arm64", "arm64", "aarch64-pc-windows-msvc"),
     },
 }
 

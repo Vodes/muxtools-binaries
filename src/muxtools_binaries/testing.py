@@ -13,7 +13,7 @@ from cpuinfo import get_cpu_info
 
 from .artifacts import read_metadata, write_report
 from .audio_testing import exercise_audio
-from .checks import AudioCheck, CheckSuite, CommandCheck
+from .checks import AudioCheck, CheckSuite, CommandCheck, reject_static_windows_runtimes
 from .io import Command, extract, run
 from .recipes import checks_for_archive
 from .targets import normalize_arch, normalize_os, target_spec
@@ -195,7 +195,13 @@ def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = Non
         elif magic[:2] == b"MZ":
             binary_format(path, data["target"])
             details = run(["objdump", "-p", path], capture=True).stdout
-            for library in re.findall(r"DLL Name: (\S+)", details):
+            libraries = re.findall(r"DLL Name: (\S+)", details)
+            toolchain = data.get("build", {}).get("toolchain")
+            if toolchain:
+                from .targets import toolchain_spec
+
+                reject_static_windows_runtimes(libraries, toolchain_spec(data["target"], toolchain).abi, path.name)
+            for library in libraries:
                 check_library(library, path)
                 if library.lower().startswith(("libgcc", "libstdc++", "libwinpthread")):
                     if not any(p.name.lower() == library.lower() for p in stage.rglob("*.dll")):

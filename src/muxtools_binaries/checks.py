@@ -62,6 +62,16 @@ class CheckSuite(Model):
             safe_path(path)
 
 
+def reject_static_windows_runtimes(libraries: list[str], abi: str, executable: str) -> None:
+    prefixes = {
+        "mingw-ucrt": ("libc++", "libunwind", "libwinpthread", "libgcc", "libstdc++"),
+        "msvc": ("vcruntime", "msvcp", "concrt", "ucrtbase", "ucrtbased", "api-ms-win-crt-"),
+    }.get(abi, ())
+    for library in libraries:
+        if library.casefold().startswith(prefixes):
+            raise ValueError(f"Imported {abi} runtime {library} in {executable}")
+
+
 def default_checks(package: Package, target: str = "") -> CheckSuite:
     return CheckSuite(smoke={name: CommandCheck(args=args) for name, args in package.executables.items()})
 

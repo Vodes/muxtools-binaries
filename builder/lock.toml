@@ -1,10 +1,41 @@
-schema_version = 2
+schema_version = 3
 
 [builders.manylinux-x86_64]
 base = "quay.io/pypa/manylinux_2_34_x86_64@sha256:934419fa742ff922855f464203cc0ad5afe3317a8541712a00cf3dc7fb893fc8"
-image = "ghcr.io/vodes/muxtools-builder@sha256:56c55d1c0967bc7fdd9bb0111d66e18980066cfc8b547ba7921ddb5417e3113e"
+# Filled after the LLVM 22 and xwin builder has passed qualification.
+image = ""
 
 [builders.manylinux-arm64]
 base = "quay.io/pypa/manylinux_2_34_aarch64@sha256:db1a485b015c1d9a6d7e2929367a69a6f772964be06cca8fe585f959a47ec0b7"
 # Filled after the native ARM64 builder has passed qualification.
-image = "ghcr.io/vodes/muxtools-builder@sha256:1ccb8969bd11eac5929ee3862e8139a81c5fa86ef30cc4b0eec6a5b8f5df38a2"
+image = ""
+
+[toolchains.llvm-mingw]
+version = "20260616"
+
+[toolchains.llvm-mingw.hosts.x86_64]
+url = "https://github.com/mstorsjo/llvm-mingw/releases/download/20260616/llvm-mingw-20260616-ucrt-ubuntu-22.04-x86_64.tar.xz"
+sha256 = "534b92e067b22a6b4441f48ae9240a3341b17825d04d577eab0cf85c44b4deda"
+
+[toolchains.llvm-mingw.hosts.arm64]
+url = "https://github.com/mstorsjo/llvm-mingw/releases/download/20260616/llvm-mingw-20260616-ucrt-ubuntu-22.04-aarch64.tar.xz"
+sha256 = "e7e5d135d93d3f2a3beaaea633a5b0e66ac75391a53feae654391913dd76102b"
+
+[toolchains.xwin]
+version = "0.9.0"
+manifest_url = "https://download.visualstudio.microsoft.com/download/pr/f8d58e41-102a-4347-a567-60d7235da3b5/469b3396a3493df91870ce13c52015a92283a2d1c6fd12e5f7e55669be8050ca/VisualStudio.vsman"
+# Hash of the served bytes; the channel advertises a different digest.
+manifest_sha256 = "b60efac8768e31b4b0bb74d312a3fd3145de9bef7f794c050d498d079e540e11"
+sdk = "10.0.26100"
+crt = "14.44.17.14"
+toolset = "14.44.35220"
+
+[toolchains.xwin.hosts.x86_64]
+url = "https://github.com/Jake-Shadle/xwin/releases/download/0.9.0/xwin-0.9.0-x86_64-unknown-linux-musl.tar.gz"
+sha256 = "31e1033f30608ba6b821d17f1461042bd54c23424813c9b4e9ae15b6d32fa4cd"
+xwin_arch = "x86_64"
+
+[toolchains.xwin.hosts.arm64]
+url = "https://github.com/Jake-Shadle/xwin/releases/download/0.9.0/xwin-0.9.0-aarch64-unknown-linux-musl.tar.gz"
+sha256 = "41466ca41e16fe7fc1b82a67babc7c3811021bf32de354b90b34d8c4edb153e2"
+xwin_arch = "aarch64"

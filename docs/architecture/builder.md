@@ -1,8 +1,16 @@
 # Builder and toolchains
 
-Source builds run in architecture-specific Linux images. Windows x86-64 builds
-cross-compile through MinGW. Linux CI hosts do not set the binary ABI baseline;
+Source builds run in architecture-specific Linux images. Windows builds cross-compile
+with MinGW or the MSVC ABI. Linux CI hosts do not set the binary ABI baseline;
 compilation stays in the builder.
+
+| Target | `gcc` | `clang` | `clang-msvc` |
+| --- | --- | --- | --- |
+| `windows-x86_64` | Fedora MinGW-w64 | LLVM 22 llvm-mingw/UCRT | LLVM 22 with xwin/MSVC |
+| `windows-arm64` | Unsupported | LLVM 22 llvm-mingw/UCRT | LLVM 22 with xwin/MSVC |
+
+Architecture remains a target property. The toolchain name does not change between
+x86-64 and ARM64.
 
 ## Image identity
 
@@ -12,15 +20,19 @@ and EPEL.
 
 The final image digest fixes the installed tool versions. Rebuilding the image
 can install a newer toolchain and requires qualification again. The image records
-its RPM inventory in `/opt/builder/packages.txt`.
+its RPM inventory in `/opt/builder/packages.txt`. The lock also pins host-native
+llvm-mingw and xwin archives, a frozen Visual Studio manifest, and exact SDK/CRT
+versions. xwin installs only the Windows architecture matching its Linux builder.
 
 `builder/lock.toml` contains:
 
 | Field | Purpose |
 | --- | --- |
-| `schema_version` | Lock format marker, currently `2`. |
+| `schema_version` | Lock format marker, currently `3`. |
 | `builders.<name>.base` | Digest-pinned manylinux base identity. |
 | `builders.<name>.image` | Adopted derived image, in `registry/path@sha256:<digest>` form. |
+| `toolchains.llvm-mingw` | LLVM 22 host archives and checksums. |
+| `toolchains.xwin` | xwin archives, frozen manifest, SDK, CRT, and toolset pins. |
 
 The target registry selects a builder entry. The build command reads its `image`
 unless `--image` overrides it. Test CI builds from `base` while an image is empty;
@@ -35,13 +47,27 @@ release builds require an adopted registry digest.
 
 ## Compiler runtimes
 
-Native GCC is the manylinux default. Clang uses that GCC installation's C++
-headers and runtime. On Windows, GCC and Clang share the repository MinGW
-sysroot and its default CRT; the project does not assume UCRT.
+Native GCC is the manylinux default. Native Linux Clang uses that GCC installation's
+C++ headers and runtime. Windows `clang` is the self-contained llvm-mingw/UCRT
+toolchain. `clang-msvc` uses normal `clang`/`clang++` argument syntax with the
+pinned xwin headers and libraries.
 
-The helpers normally link compiler runtimes statically. On Windows, the build
-also copies required GCC, libstdc++, and winpthread DLLs when they remain imported.
-All source-built Linux executables must satisfy glibc 2.34.
+The helpers normally link compiler runtimes statically. Windows GCC keeps its
+existing fallback that bundles imported GCC, libstdc++, and winpthread DLLs.
+llvm-mingw and MSVC runtime DLL imports are rejected. MinGW and MSVC builds use
+different sysroots and private-prefix package discovery. All source-built Linux
+executables must satisfy glibc 2.34.
+
+Recipes using `clang-msvc` keep GCC-style Clang by default, including Autotools
+recipes. A CMake recipe that specifically needs the cl-compatible frontend can
+pass `clang_cl=True` to `BuildContext.cmake`. That local mode uses `clang-cl`,
+`lld-link`, `llvm-lib`, `llvm-rc`, `llvm-mt`, and the static `/MT` runtime without
+creating a separate toolchain identity.
+
+Autotools normally receives the real MSVC host triple. If project-owned
+`configure.ac` or `configure.in` checks `host_os` for MinGW without mentioning
+MSVC, the helper supplies the equivalent MinGW host alias so the project selects
+its Windows code path. Clang still receives the real MSVC target triple.
 
 x265 and MKVToolNix keep libstdc++ static but use system `libgcc_s`. The
 repository's static unwind library introduces `_dl_find_object@GLIBC_2.35`. The
@@ -65,7 +91,7 @@ These are almost entirely copied from Vapoursynth's new plugin cpu level guideli
 See the [Vapoursynth R75 Release Blogpost](https://www.vapoursynth.com/2026/04/30/r75-sanding-of-the-r74-edges-and-plugin-manifests/) for details and reasoning.
 
 Windows adds `.exe` after the CPU suffix.
-Linux ARM64 currently supports only `baseline`, compiled with `-march=armv8-a`.
+Linux and Windows ARM64 support only `baseline`, compiled with `-march=armv8-a`.
 See [CPU eligibility](testing.md#cpu-eligibility) for the test runner's rules.
 
 To add an operating system or architecture, extend the explicit target registry

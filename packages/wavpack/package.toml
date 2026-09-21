@@ -2,8 +2,8 @@ schema_version = 1
 name = "wavpack"
 # Upstream description: https://www.wavpack.com/
 description = "Hybrid Lossless Audio Compression"
-version = "5.9.0"
-version_code = 1
+version = "5.9.0.post1"
+version_code = 2
 type = "source-build"
 
 [source]
@@ -20,6 +20,12 @@ cpu_levels = ["baseline"]
 toolchain = "gcc"
 lto = false
 cpu_levels = ["baseline"]
+
+[targets.windows-arm64]
+toolchain = "clang-msvc"
+lto = false
+cpu_levels = ["baseline"]
+extra_ldflags = ["-luser32", "-lshell32"]
 
 [executables]
 wavpack = ["--version"]

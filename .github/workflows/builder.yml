@@ -39,11 +39,19 @@ jobs:
           path: dist/qualification
   windows:
     needs: qualify
-    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - builder: manylinux-x86_64
+            runner: windows-2022
+          - builder: manylinux-arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/download-artifact@v8.0.1
         with:
-          name: compiler-tests-manylinux-x86_64
+          name: compiler-tests-${{ matrix.builder }}
           path: qualification
       - shell: pwsh
         run: |
