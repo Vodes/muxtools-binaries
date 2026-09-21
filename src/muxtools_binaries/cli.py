@@ -79,6 +79,9 @@ def _matrix(root: Path, names: str, changed_from: str | None) -> dict[str, list[
                 "build_runner": target_spec(target).build_runner,
                 "smoke_runner": target_spec(target).smoke_runner,
                 "builder": target_spec(target).builder,
+                "builder_kind": (
+                    "container" if BUILDERS[target_spec(target).builder].platform is not None else "native"
+                ),
             }
             for p in packages.values()
             for target in p.targets
@@ -100,6 +103,9 @@ def _ignored_matrix_path(path: str) -> bool:
 
 def _build_in_container(root: Path, args: argparse.Namespace, image: str, revision: str) -> None:
     target = target_spec(args.target)
+    platform_name = BUILDERS[target.builder].platform
+    if platform_name is None:
+        raise ValueError(f"Native target cannot run in a container: {args.target}")
     user: list[str] = []
     if sys.platform != "win32":
         user = ["--user", f"{os.getuid()}:{os.getgid()}"]
@@ -109,7 +115,7 @@ def _build_in_container(root: Path, args: argparse.Namespace, image: str, revisi
             "run",
             "--rm",
             "--platform",
-            BUILDERS[target.builder].platform,
+            platform_name,
             *user,
             "-v",
             f"{root}:/work",
@@ -145,15 +151,23 @@ def _build(root: Path, args: argparse.Namespace) -> None:
     package = load_packages(root, [args.package])[args.package]
     if args.target not in package.targets:
         raise ValueError(f"Unsupported target for {package.name}: {args.target}")
-    image = builder_image(root, args.target, args.image, args.channel == "release")
     revision = args.revision or subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
-    if not args.inside:
-        _build_in_container(root, args, image, revision)
+    builder = BUILDERS[target_spec(args.target).builder]
+    if builder.platform is None:
+        if args.image:
+            raise ValueError("--image is not supported for native targets")
+        if args.inside:
+            raise ValueError("--inside is only supported for container targets")
+        image = None
     else:
-        stage, checks = produce(root, package, args.target, args.jobs)
-        data = metadata(package, args.target, revision, image, args.channel)
-        structural(stage, data, checks)
-        print(pack(stage, data, root / "dist"))
+        image = builder_image(root, args.target, args.image, args.channel == "release")
+        if not args.inside:
+            _build_in_container(root, args, image, revision)
+            return
+    stage, checks = produce(root, package, args.target, args.jobs)
+    data = metadata(package, args.target, revision, image, args.channel)
+    structural(stage, data, checks)
+    print(pack(stage, data, root / "dist"))
 
 
 def main() -> int:

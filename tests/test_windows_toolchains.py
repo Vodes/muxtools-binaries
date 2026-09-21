@@ -185,3 +185,8 @@ def test_builder_lock_schema_and_pins():
     assert lock["toolchains"]["xwin"]["toolset"] == "14.44.35220"
     assert builder_configuration(root, "windows-x86_64")["name"] == "manylinux-x86_64"
     assert builder_configuration(root, "windows-arm64")["name"] == "manylinux-arm64"
+    assert builder_configuration(root, "macos-arm64") == {
+        "name": "native-macos-arm64",
+        "kind": "native",
+        "platform": None,
+    }

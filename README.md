@@ -1,6 +1,6 @@
 # muxtools-binaries
 
-Portable command-line tools for Linux and Windows on x86-64 and ARM64.<br>
+Portable command-line tools for Linux and Windows on x86-64 and ARM64, plus macOS on ARM64.<br>
 Linux and Windows (x86_64) are the only first-class targets. Everything else is provided on a best effort basis.<br>
 Available packages are listed on the documention linked below. (Or just check the packages folder)
 
@@ -9,8 +9,8 @@ Available packages are listed on the documention linked below. (Or just check th
 [Package setup](docs/packages/adding-a-package.md)
 
 Source builds use architecture-specific Linux builder images. Windows builds use
-MinGW or the MSVC ABI through Clang.
-Linux source builds require x86-64-v2 and glibc 2.34.<br>
+MinGW or the MSVC ABI through Clang. Packages declaring `macos-arm64` build natively.
+Linux source builds require x86-64-v2 and glibc 2.34; macOS ARM64 builds target macOS 12.0.<br>
 Some builds, x265 for example, also include AVX2, AVX512, and (a cut down) Zen 4 variants.<br>
 
 Imported tools can have extra runtime requirements.<br>

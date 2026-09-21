@@ -11,14 +11,19 @@ import zstandard
 from .checks import archive_checks
 from .io import run, sha256
 from .models import Package, safe_path
-from .targets import TARGETS, normalize_arch, normalize_os, target_spec, toolchain_spec
+from .targets import BUILDERS, TARGETS, normalize_arch, normalize_os, target_spec, toolchain_spec
 
 
-def metadata(package: Package, target: str, revision: str, image: str, channel: str) -> dict[str, Any]:
+def metadata(package: Package, target: str, revision: str, image: str | None, channel: str) -> dict[str, Any]:
     config = package.targets[target]
     target_info = target_spec(target)
+    native = BUILDERS[target_info.builder].platform is None
+    if native and image is not None:
+        raise ValueError("Native builders cannot record an image")
+    if not native and image is None:
+        raise ValueError("Container builders must record an image")
     data: dict[str, Any] = dict(
-        schema_version=4,
+        schema_version=5,
         name=package.name,
         version=package.version,
         version_code=package.version_code,
@@ -26,8 +31,14 @@ def metadata(package: Package, target: str, revision: str, image: str, channel: 
         platform=dict(os=target_info.os, arch=target_info.arch),
         binaries=package.binaries(target),
         provenance=dict(type=package.type, channel=channel),
-        builder=dict(revision=revision, image=image, backend=target_info.builder),
+        builder=dict(
+            kind="native" if native else "container",
+            revision=revision,
+            backend=target_info.builder,
+        ),
     )
+    if image is not None:
+        data["builder"]["image"] = image
     if package.description:
         data["description"] = package.description
     if package.provider:
@@ -46,10 +57,18 @@ def metadata(package: Package, target: str, revision: str, image: str, channel: 
             key: getattr(config, key)
             for key in ("toolchain", "lto", "cpu_levels", "extra_cflags", "extra_cxxflags", "extra_ldflags")
         }
+        linker_command = [toolchain.linker, "-v"] if target_info.os == "macos" else [toolchain.linker, "--version"]
+        linker_result = run(linker_command, capture=True)
+        if target_info.os == "macos":
+            linker_version = "\n".join(
+                output.strip() for output in (linker_result.stdout, linker_result.stderr) if output.strip()
+            )
+        else:
+            linker_version = linker_result.stdout.splitlines()[0]
         data["build"].update(
             compiler_version=run([toolchain.cc, "--version"], capture=True).stdout.splitlines()[0],
             linker=toolchain.linker,
-            linker_version=run([toolchain.linker, "--version"], capture=True).stdout.splitlines()[0],
+            linker_version=linker_version,
         )
     if package.build:
         data.setdefault("build", {})["options"] = package.build
@@ -69,17 +88,26 @@ def validate_layout(stage: Path, data: dict[str, Any]) -> None:
         raise ValueError("Invalid artifact identity")
     if type(data.get("version_code")) is not int or data["version_code"] < 1 or data.get("target") not in TARGETS:
         raise ValueError("Invalid artifact version code or target")
-    if data.get("schema_version") not in (1, 2, 3, 4) or data.get("provenance", {}).get("channel") not in (
+    if data.get("schema_version") not in (1, 2, 3, 4, 5) or data.get("provenance", {}).get("channel") not in (
         "test",
         "release",
     ):
         raise ValueError("Unsupported metadata schema or channel")
-    if data["schema_version"] == 4:
+    if data["schema_version"] >= 4:
         target = target_spec(data["target"])
         if data.get("platform") != {"os": target.os, "arch": target.arch}:
             raise ValueError("Artifact platform differs from its target")
         if data.get("builder", {}).get("backend") != target.builder:
             raise ValueError("Artifact builder differs from its target")
+    if data["schema_version"] >= 5:
+        builder = data.get("builder", {})
+        expected_kind = "container" if BUILDERS[target_spec(data["target"]).builder].platform is not None else "native"
+        if builder.get("kind") != expected_kind:
+            raise ValueError("Artifact builder kind differs from its target")
+        if expected_kind == "container" and not isinstance(builder.get("image"), str):
+            raise ValueError("Container artifact is missing its builder image")
+        if expected_kind == "native" and "image" in builder:
+            raise ValueError("Native artifact cannot record a builder image")
     if not isinstance(data.get("description", ""), str):
         raise ValueError("Invalid artifact description")
     seen = set()

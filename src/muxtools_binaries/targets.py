@@ -11,7 +11,7 @@ type ToolchainABI = Literal["native", "mingw-gcc", "mingw-ucrt", "msvc"]
 @dataclass(frozen=True)
 class BuilderSpec:
     name: str
-    platform: str
+    platform: str | None
     host_target: str
 
 
@@ -64,10 +64,12 @@ X86_CPU_FLAGS = {
     "zn4": ("-march=znver4", "-mno-sse4a", "-mno-avx512bf16"),
 }
 ARM64_CPU_FLAGS = {"baseline": ("-march=armv8-a",)}
+APPLE_ARM64_CPU_FLAGS = {"baseline": ()}
 
 BUILDERS = {
     "manylinux-x86_64": BuilderSpec("manylinux-x86_64", "linux/amd64", "linux-x86_64"),
     "manylinux-arm64": BuilderSpec("manylinux-arm64", "linux/arm64", "linux-arm64"),
+    "native-macos-arm64": BuilderSpec("native-macos-arm64", None, "macos-arm64"),
 }
 
 TARGETS = {
@@ -116,6 +118,16 @@ TARGETS = {
         "manylinux-arm64",
         ARM64_CPU_FLAGS,
         executable_suffix=".exe",
+    ),
+    "macos-arm64": TargetSpec(
+        "macos-arm64",
+        "macos",
+        "arm64",
+        "macho",
+        "macos-15",
+        "macos-15",
+        "native-macos-arm64",
+        APPLE_ARM64_CPU_FLAGS,
     ),
 }
 
@@ -256,6 +268,19 @@ TOOLCHAINS = {
     "windows-arm64": {
         "clang": _llvm_mingw("windows-arm64", ARM64_MINGW_TRIPLE),
         "clang-msvc": _clang_msvc("windows-arm64", "arm64", "aarch64-pc-windows-msvc"),
+    },
+    "macos-arm64": {
+        "clang": ToolchainSpec(
+            "clang",
+            "macos-arm64",
+            "clang",
+            "clang++",
+            "ar",
+            "ranlib",
+            "nm",
+            "ld",
+            "clang",
+        ),
     },
 }
 

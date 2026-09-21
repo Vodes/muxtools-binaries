@@ -27,8 +27,9 @@ recorded separately in archive metadata.
 
 ## Publish packages
 
-Before the first release, [qualify and adopt a builder](builder.md#qualify-and-adopt-an-image).
-The adopted image must be available by registry digest.
+Before the first container-backed release, [qualify and adopt a builder](builder.md#qualify-and-adopt-an-image).
+Its image must be available by registry digest. Native macOS releases instead
+require the recorded repository revision and native builder identity.
 
 1. Merge the package changes and adopted builder digest into `main`.
 2. Run **Build and test** manually on `main`.

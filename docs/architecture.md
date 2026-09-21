@@ -6,7 +6,7 @@ published. A requested build always runs, even if that version is already publis
 ## Build flow
 
 1. Load `packages/<name>/package.toml` and validate its recipe options and checks.
-2. Run `recipe.py` in the builder image to compile or import the executables.
+2. Run `recipe.py` in the target's container or validated native builder.
 3. Check the staged files and create a `.tar.zst` archive with `.metadata.toml`.
 4. Test the archive on its target operating system.
 5. On a manual release run, publish all targets and update `versions.json`.
@@ -19,7 +19,7 @@ published. A requested build always runs, even if that version is already publis
 | `packages/<name>/recipe.py` | Build steps, check definitions, and update discovery. |
 | `packages/<name>/tests/` | Optional tests for package-specific behavior. |
 | `src/muxtools_binaries/` | Toolchains, build helpers, archive checks, and release operations. |
-| `builder/` | Builder image, adopted digest, and qualification tests. |
+| `builder/` | Container images, adopted digests, and qualification tests. |
 | `.github/workflows/` | Build selection, native tests, update PRs, releases, and documentation. |
 
 ## Detailed contracts

@@ -5,7 +5,7 @@ render_macros: true
 # muxtools-binaries
 
 This project builds and packages portable command-line tools for Linux and Windows
-on x86-64, with opt-in ARM64 targets.
+on x86-64, with opt-in ARM64 targets including native macOS support.
 
 | Task | Start here |
 | --- | --- |
@@ -22,7 +22,8 @@ on x86-64, with opt-in ARM64 targets.
 {{ available_packages() }}
 
 Source-built Linux executables target glibc 2.34. The x86-64 baseline is
-x86-64-v2; ARM64 packages use the generic ARMv8-A baseline.
+x86-64-v2; Linux and Windows ARM64 packages use the generic ARMv8-A baseline.
+Native macOS ARM64 packages target macOS 12.0.
 x265 also supplies AVX2, AVX512, and Zen 4 variants.
 See [runtime requirements](architecture/builder.md#imported-runtime-requirements)
 before using imported tools.

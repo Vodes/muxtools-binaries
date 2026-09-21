@@ -20,6 +20,9 @@ def main() -> None:
             if data["provenance"]["type"] != "source-build":
                 continue
             target = target_spec(data["target"])
+            platform_name = BUILDERS[target.builder].platform
+            if platform_name is None:
+                continue
             suite = checks_for_archive(data, Path(__file__).resolve().parents[1])
             for name, variants in data["binaries"].items():
                 run_smoke(
@@ -28,7 +31,7 @@ def main() -> None:
                         "run",
                         "--rm",
                         "--platform",
-                        BUILDERS[target.builder].platform,
+                        platform_name,
                         "--network=none",
                         "-v",
                         f"{stage}:/package:ro",

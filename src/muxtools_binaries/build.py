@@ -1,4 +1,5 @@
 import os
+import platform
 import re
 import shlex
 import shutil
@@ -13,7 +14,7 @@ from .checks import CheckSuite, reject_static_windows_runtimes
 from .io import download, extract, run
 from .models import ArchiveSource, GitSource, Model, Package
 from .recipes import load_recipe, recipe_checks, recipe_options
-from .targets import BUILDERS, target_spec, toolchain_spec
+from .targets import BUILDERS, normalize_arch, normalize_os, target_spec, toolchain_spec
 
 
 class AutotoolsOptions(Model):
@@ -70,7 +71,8 @@ class BuildContext:
         if pin.recursive:
             run(["git", "-C", path, "submodule", "sync", "--recursive"])
             run(["git", "-C", path, "submodule", "update", "--init", "--recursive"])
-        run(["git", "-C", path, "tag", pin.tag, pin.commit])
+        # Native builds inherit host Git settings; force a lightweight tag even when tag.gpgSign is enabled.
+        run(["git", "-C", path, "tag", "--no-sign", pin.tag, pin.commit])
         self.notices(path, name)
         if pin.recursive:
             submodules = run(
@@ -168,6 +170,8 @@ class BuildContext:
             PKG_CONFIG_SYSROOT_DIR="",
             SOURCE_DATE_EPOCH="0",
         )
+        if self.target_info.os == "macos":
+            env["MACOSX_DEPLOYMENT_TARGET"] = "12.0"
         if self.toolchain.rcflags:
             env["RCFLAGS"] = shlex.join(self.toolchain.rcflags)
         return env
@@ -263,15 +267,18 @@ class BuildContext:
             "CMAKE_BUILD_TYPE": "Release",
             "CMAKE_INSTALL_LIBDIR": "lib",
             "CMAKE_PREFIX_PATH": str(self.prefix),
-            "CMAKE_FIND_ROOT_PATH": f"{self.prefix};{self.toolchain.sysroot or ''}",
-            "CMAKE_FIND_ROOT_PATH_MODE_PROGRAM": "NEVER",
-            "CMAKE_FIND_ROOT_PATH_MODE_LIBRARY": "ONLY",
-            "CMAKE_FIND_ROOT_PATH_MODE_INCLUDE": "ONLY",
-            "CMAKE_FIND_ROOT_PATH_MODE_PACKAGE": "ONLY",
             "CMAKE_FIND_USE_PACKAGE_REGISTRY": False,
             "CMAKE_FIND_USE_SYSTEM_PACKAGE_REGISTRY": False,
             **definitions,
         }
+        if BUILDERS[self.target_info.builder].platform is not None:
+            options.update(
+                CMAKE_FIND_ROOT_PATH=f"{self.prefix};{self.toolchain.sysroot or ''}",
+                CMAKE_FIND_ROOT_PATH_MODE_PROGRAM="NEVER",
+                CMAKE_FIND_ROOT_PATH_MODE_LIBRARY="ONLY",
+                CMAKE_FIND_ROOT_PATH_MODE_INCLUDE="ONLY",
+                CMAKE_FIND_ROOT_PATH_MODE_PACKAGE="ONLY",
+            )
         options.update(
             CMAKE_INSTALL_PREFIX=str(self.prefix),
             CMAKE_C_COMPILER=env["CC"],
@@ -340,8 +347,14 @@ class BuildContext:
 
 
 def produce(root: Path, package: Package, target: str, jobs: int) -> tuple[Path, CheckSuite]:
-    if os.environ.get("MUXTOOLS_BUILDER") != "1":
-        raise ValueError("Builds must run inside the builder image; use the build command without --inside")
+    target_info = target_spec(target)
+    builder = BUILDERS[target_info.builder]
+    if builder.platform is not None and os.environ.get("MUXTOOLS_BUILDER") != "1":
+        raise ValueError("Container builds must run inside the builder image; use the build command without --inside")
+    if builder.platform is None and (
+        normalize_os(platform.system()) != target_info.os or normalize_arch(platform.machine()) != target_info.arch
+    ):
+        raise ValueError(f"Native builds for {target} require {target_info.os}/{target_info.arch}")
     workroot = root / "build" / package.name / target
     workroot.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(prefix="run-", dir=workroot))
@@ -369,8 +382,11 @@ def produce(root: Path, package: Package, target: str, jobs: int) -> tuple[Path,
     return stage, checks
 
 
-def builder_configuration(root: Path, target: str) -> dict[str, str]:
+def builder_configuration(root: Path, target: str) -> dict[str, str | None]:
     backend = target_spec(target).builder
+    builder = BUILDERS[backend]
+    if builder.platform is None:
+        return {"name": backend, "kind": "native", "platform": None}
     lock = tomllib.loads((root / "builder/lock.toml").read_text())
     if lock.get("schema_version") != 3 or backend not in lock.get("builders", {}):
         raise ValueError(f"No locked builder for {target}")
@@ -380,10 +396,12 @@ def builder_configuration(root: Path, target: str) -> dict[str, str]:
         raise ValueError(f"Builder {backend} needs a pinned base image")
     if image and not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9./:_-]*@sha256:[0-9a-f]{64}", image):
         raise ValueError(f"Builder {backend} image must be pinned by digest")
-    return {"name": backend, "platform": BUILDERS[backend].platform, "base": base, "image": image}
+    return {"name": backend, "kind": "container", "platform": builder.platform, "base": base, "image": image}
 
 
 def builder_image(root: Path, target: str, override: str | None = None, release: bool = False) -> str:
+    if BUILDERS[target_spec(target).builder].platform is None:
+        raise ValueError("Native targets do not use builder images")
     image = override or builder_configuration(root, target)["image"]
     if not image:
         raise ValueError("Set builder/lock.toml image to a qualified digest, or use --image for local testing")

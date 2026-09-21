@@ -12,7 +12,7 @@ from .artifacts import read_metadata
 from .build import builder_image
 from .io import extract, sha256
 from .models import Package, load_packages
-from .targets import target_spec
+from .targets import BUILDERS, target_spec
 
 
 def release_allowed(event: str, ref: str, publish: bool) -> bool:
@@ -128,12 +128,12 @@ def _validate_target(data: dict[str, Any], package: Package, root: Path) -> None
     from .checks import archive_checks
     from .recipes import load_recipe, recipe_checks
 
-    if data["schema_version"] not in (3, 4):
+    if data["schema_version"] not in (3, 4, 5):
         actual_checks = archive_checks(data)
         if actual_checks != recipe_checks(load_recipe(root, package.name), package, data["target"]):
             raise ValueError("Artifact checks differ from package recipe")
     config = package.targets[data["target"]]
-    if data["schema_version"] not in (3, 4) and data["smoke"] != package.executables:
+    if data["schema_version"] not in (3, 4, 5) and data["smoke"] != package.executables:
         raise ValueError("Artifact smoke commands differ from package definition")
     if config.asset and data["provenance"].get("asset") != config.asset.model_dump():
         raise ValueError("Artifact import differs from package definition")
@@ -192,9 +192,14 @@ def collect(root: Path, artifacts: Path) -> ReleaseArtifacts:
             raise ValueError(f"Not a release artifact: {archive.name}")
         package = packages[data["name"]]
         _validate_package(data, package)
-        if data["builder"]["revision"] != os.environ["GITHUB_SHA"] or data["builder"]["image"] != builder_image(
-            root, data["target"], release=True
-        ):
+        builder = data["builder"]
+        target_builder = BUILDERS[target_spec(data["target"]).builder]
+        eligible = builder["revision"] == os.environ["GITHUB_SHA"]
+        if target_builder.platform is None:
+            eligible = eligible and builder.get("kind") == "native" and "image" not in builder
+        else:
+            eligible = eligible and builder.get("image") == builder_image(root, data["target"], release=True)
+        if not eligible:
             raise ValueError("Artifact revision or builder is not eligible for publishing")
         _validate_target(data, package, root)
         _require_native_report(artifacts, archive, digest, package, data["target"])

@@ -1,9 +1,10 @@
+import shlex
 import subprocess
 import tarfile
 from pathlib import Path
 
 from muxtools_binaries.build import BuildContext
-from muxtools_binaries.models import ArchiveSource, Source
+from muxtools_binaries.models import ArchiveSource, Package, Source
 
 
 def _git(directory: Path, *args: str) -> str:
@@ -92,3 +93,21 @@ def test_cmake_defaults_overrides_and_install_environment(package, tmp_path, mon
     ctx.cmake("library", tmp_path / "source", {})
     assert "-DCMAKE_BUILD_TYPE=Release" in calls[0][0]
     assert len(calls) == 2
+
+
+def test_native_macos_environment_and_cmake_keep_private_prefix_without_cross_isolation(package, tmp_path, monkeypatch):
+    definition = package.model_dump()
+    definition["targets"] = {"macos-arm64": {"toolchain": "clang"}}
+    native = Package.model_validate(definition)
+    ctx = BuildContext(tmp_path, native, "macos-arm64", tmp_path / "work", tmp_path / "stage", 2)
+
+    env = ctx.build_environment()
+    assert env["MACOSX_DEPLOYMENT_TARGET"] == "12.0"
+    assert not any(flag.startswith("-march") for flag in shlex.split(env["CFLAGS"]))
+
+    calls = []
+    monkeypatch.setattr("muxtools_binaries.build.run", lambda args, **kwargs: calls.append((args, kwargs)))
+    ctx.cmake("library", tmp_path / "source", {})
+    configure = calls[0][0]
+    assert f"-DCMAKE_PREFIX_PATH={ctx.prefix}" in configure
+    assert not any("CMAKE_FIND_ROOT_PATH" in str(argument) for argument in configure)

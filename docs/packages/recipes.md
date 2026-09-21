@@ -47,6 +47,9 @@ For standard Autotools builds, re-export `build_autotools` as `build` and
 `AutotoolsOptions` as `Options`. The helper builds dependencies in manifest order,
 then builds and stages the main project for each CPU level.
 
+CMake recipes can use `cmake(..., install=True)` followed by `stage_binaries()`
+for every declared target, including both native and cross-compiled targets.
+
 ## Option models
 
 Subclass `muxtools_binaries.models.Model` to define `Options` or `UpdateOptions`.

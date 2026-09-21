@@ -13,7 +13,7 @@ accepts them.
 ## Top-level fields
 
 Put scalar fields before the first TOML table header. Package manifests use
-schema 1; [archive metadata](../architecture/artifacts.md#metadata) uses schema 4.
+schema 1; [archive metadata](../architecture/artifacts.md#metadata) uses schema 5.
 
 | Field | Type | Required or default | Meaning and limits |
 | --- | --- | --- | --- |
@@ -78,7 +78,7 @@ target and CPU level. A custom recipe controls its own dependency steps.
 ## Target settings
 
 The registered target names are `linux-x86_64`, `windows-x86_64`, `linux-arm64`,
-and `windows-arm64`. There is no top-level target-default table. Declare each
+`windows-arm64`, and `macos-arm64`. There is no top-level target-default table. Declare each
 target separately.
 
 | Field in `[targets.<target>]` | Type | Default | Meaning and limits |
@@ -199,7 +199,7 @@ It keeps the other CMake settings. Other targets use the common values.
 There is no TOML null value to delete an inherited key. An empty nested table
 does not clear its inherited entries; an empty array replaces an inherited array.
 
-### Autotools: fdkaac, FLAC, Opus tools, and WavPack
+### Autotools: fdkaac, FLAC, and Opus tools
 
 These recipes expose `AutotoolsOptions` as `Options`.
 

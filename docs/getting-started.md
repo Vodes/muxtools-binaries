@@ -1,6 +1,7 @@
 # Build a package
 
-Run these commands from the repository root. Install Git, uv, and Docker first.
+Run these commands from the repository root. Install Git and uv; container targets
+also require Docker.
 The Python project requires Python 3.12 or later. Docker must run Linux containers,
 including when you build Windows packages.
 
@@ -59,6 +60,18 @@ uv run muxtools-build build flac --target linux-arm64 --image muxtools-builder:a
 ```
 
 This runs through QEMU locally and is slower than the native ARM64 CI runner.
+
+On an ARM64 Mac, any package that declares a `macos-arm64` target builds without
+Docker. Install the native build tools, then substitute its package name below:
+
+```sh
+brew install autoconf automake libtool pkg-config cmake ninja
+uv run muxtools-build build PACKAGE --target macos-arm64
+uv run muxtools-build test dist/PACKAGE-VERSION-macos-arm64.tar.zst
+```
+
+The build command prints the exact archive path. Native builds enforce macOS 12.0
+compatibility and reject non-system dylib dependencies.
 
 If you invoke the test command outside the checkout, put `--root /path/to/checkout`
 before `test`. This lets the runner find `tests/data/audio/wav_source.wav`.

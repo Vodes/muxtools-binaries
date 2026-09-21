@@ -1,7 +1,7 @@
 # Archives and catalog
 
 Each target produces `{name}-{version}-{target}.tar.zst` and a matching
-`.sha256` file. Linux and Windows use the same archive format.
+`.sha256` file. Linux, Windows, and macOS use the same archive format.
 
 ## Archive layout
 
@@ -27,18 +27,18 @@ produce different archive checksums.
 
 ## Metadata
 
-New archives use metadata schema 4. Package manifests and the public catalog
+New archives use metadata schema 5. Package manifests and the public catalog
 remain on schema 1.
 
 | Metadata field | Contents |
 | --- | --- |
-| `schema_version` | `4` for newly built archives. |
+| `schema_version` | `5` for newly built archives. |
 | `name`, `version`, `version_code`, `target` | Package identity and explicit target. |
 | `platform` | Normalized target operating system and architecture. |
 | `description` | Optional user-facing text from the package manifest. |
 | `binaries` | Logical executable names mapped to CPU variants and archive paths. |
 | `provenance` | Build type, test or release channel, optional provider, and imported asset details. |
-| `builder` | Builder image, backend, and repository revision. |
+| `builder` | Builder kind, backend, and repository revision; containers also record their pinned image. |
 | `source`, `dependencies` | Source pins, when present. |
 | `build` | Common and target recipe options; source builds also record toolchain, linker, versions, CPU levels, LTO, and extra flags. |
 | `runtime` | Linux requirements and exceptions, when declared. |

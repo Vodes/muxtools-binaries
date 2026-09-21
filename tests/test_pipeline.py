@@ -84,6 +84,15 @@ def test_arm64_target_accepts_only_registered_toolchains_and_cpu_levels(package)
         Package.model_validate(definition)
 
 
+def test_macos_target_is_native_baseline_only(package):
+    definition = package.model_dump()
+    definition["targets"] = {"macos-arm64": {"toolchain": "clang"}}
+    native = Package.model_validate(definition)
+    assert native.targets["macos-arm64"].cpu_levels == ["baseline"]
+    with pytest.raises(ValueError, match="Unsupported toolchain gcc for macos-arm64"):
+        Package.model_validate(definition | {"targets": {"macos-arm64": {"toolchain": "gcc"}}})
+
+
 def test_archive_roundtrip(tmp_path):
     stage = tmp_path / "stage"
     stage.mkdir()
@@ -123,9 +132,10 @@ def test_optional_description_roundtrip(package, tmp_path, monkeypatch, descript
     with monkeypatch.context() as patch:
         patch.setattr("muxtools_binaries.artifacts.run", Mock(return_value=SimpleNamespace(stdout="compiler 1.0")))
         data = metadata(package, "linux-x86_64", "revision", "image", "test")
-    assert data["schema_version"] == 4
+    assert data["schema_version"] == 5
     assert data["platform"] == {"os": "linux", "arch": "x86_64"}
     assert data["builder"]["backend"] == "manylinux-x86_64"
+    assert data["builder"]["kind"] == "container"
     assert ("description" in data) == bool(description)
     stage = tmp_path / "stage"
     stage.mkdir()
@@ -137,6 +147,26 @@ def test_optional_description_roundtrip(package, tmp_path, monkeypatch, descript
     assert read_metadata(tmp_path / "unpacked").get("description", "") == (description or "")
     with pytest.raises(ValueError, match="Invalid artifact description"):
         validate_layout(stage, dict(data, description=123))
+
+
+def test_native_metadata_omits_image_and_records_apple_linker_stderr(package, monkeypatch):
+    definition = package.model_dump()
+    definition["targets"] = {"macos-arm64": {"toolchain": "clang"}}
+    native = Package.model_validate(definition)
+
+    def version(args, **kwargs):
+        if args == ["ld", "-v"]:
+            return SimpleNamespace(stdout="Apple ld 123\n", stderr="supported architectures: arm64\n")
+        return SimpleNamespace(stdout="Apple clang 17\n", stderr="")
+
+    monkeypatch.setattr("muxtools_binaries.artifacts.run", version)
+    data = metadata(native, "macos-arm64", "revision", None, "test")
+    assert data["builder"] == {
+        "kind": "native",
+        "backend": "native-macos-arm64",
+        "revision": "revision",
+    }
+    assert data["build"]["linker_version"] == "Apple ld 123\nsupported architectures: arm64"
 
 
 @pytest.mark.parametrize("kind", ["zip", "tar", "7z"])

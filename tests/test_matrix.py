@@ -147,3 +147,19 @@ def test_nul_delimited_special_path_and_manual_selection(tmp_path):
     assert _names(root, base) == {"alpha"}
     assert _names(root, base, "beta") == {"beta"}
     assert _names(root) == {"alpha", "beta"}
+
+
+def test_matrix_marks_native_and_container_builders(tmp_path):
+    root, _ = _repo(tmp_path)
+    manifest = root / "packages/alpha/package.toml"
+    manifest.write_text(
+        manifest.read_text().replace(
+            '[targets."linux-x86_64"]',
+            '[targets."linux-x86_64"]\n\n[targets."macos-arm64"]\ntoolchain = "clang"',
+        )
+    )
+    entries = _matrix(root, "alpha", None)["include"]
+    assert {entry["target"]: entry["builder_kind"] for entry in entries} == {
+        "linux-x86_64": "container",
+        "macos-arm64": "native",
+    }

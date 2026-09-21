@@ -1,13 +1,14 @@
 # Builder and toolchains
 
-Source builds run in architecture-specific Linux images. Windows builds cross-compile
-with MinGW or the MSVC ABI. Linux CI hosts do not set the binary ABI baseline;
-compilation stays in the builder.
+Linux source builds run in architecture-specific images. Windows builds cross-compile
+there with MinGW or the MSVC ABI. The `macos-arm64` target runs directly on an
+ARM64 macOS host; native builders reject a mismatched host and do not accept `--image`.
 
 | Target | `gcc` | `clang` | `clang-msvc` |
 | --- | --- | --- | --- |
 | `windows-x86_64` | Fedora MinGW-w64 | LLVM 22 llvm-mingw/UCRT | LLVM 22 with xwin/MSVC |
 | `windows-arm64` | Unsupported | LLVM 22 llvm-mingw/UCRT | LLVM 22 with xwin/MSVC |
+| `macos-arm64` | Unsupported | Apple Clang | Unsupported |
 
 Architecture remains a target property. The toolchain name does not change between
 x86-64 and ARM64.
@@ -34,9 +35,11 @@ versions. xwin installs only the Windows architecture matching its Linux builder
 | `toolchains.llvm-mingw` | LLVM 22 host archives and checksums. |
 | `toolchains.xwin` | xwin archives, frozen manifest, SDK, CRT, and toolset pins. |
 
-The target registry selects a builder entry. The build command reads its `image`
-unless `--image` overrides it. Test CI builds from `base` while an image is empty;
-release builds require an adopted registry digest.
+The target registry selects either a container or native builder. Container builds
+read the locked `image` unless `--image` overrides it. Native builds execute directly
+and use the repository revision plus recorded Xcode compiler/linker versions as provenance.
+Those observed versions belong to each build environment; local tool and SDK
+versions are not assumed to match the `macos-15` CI runner.
 
 ## Qualify and adopt an image
 
@@ -76,7 +79,8 @@ on consumers.
 
 Autotools receives CPU flags through compiler arguments so configure can retain
 its optimization defaults. CMake receives target flags alongside upstream Release
-settings.
+settings. Native CMake builds use the private prefix without cross-compilation
+`CMAKE_FIND_ROOT_PATH` isolation. macOS builds set `MACOSX_DEPLOYMENT_TARGET=12.0`.
 
 ## CPU levels
 
@@ -92,6 +96,8 @@ See the [Vapoursynth R75 Release Blogpost](https://www.vapoursynth.com/2026/04/3
 
 Windows adds `.exe` after the CPU suffix.
 Linux and Windows ARM64 support only `baseline`, compiled with `-march=armv8-a`.
+macOS ARM64 is baseline-only and uses Apple Clang's target defaults without an
+additional ARM `-march` flag.
 See [CPU eligibility](testing.md#cpu-eligibility) for the test runner's rules.
 
 To add an operating system or architecture, extend the explicit target registry

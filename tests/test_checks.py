@@ -1,4 +1,5 @@
 import os
+import struct
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -45,6 +46,8 @@ def archive_data():
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX wrapper fixture")
 def test_archive_executes_checks_and_skips_unsupported_variants(tmp_path, monkeypatch, archive_data):
+    monkeypatch.setattr("muxtools_binaries.testing.platform.system", lambda: "Linux")
+    monkeypatch.setattr("muxtools_binaries.testing.platform.machine", lambda: "x86_64")
     stage = tmp_path / "stage"
     stage.mkdir()
     binary = stage / "example"
@@ -110,3 +113,33 @@ def test_structural_rejects_recipe_forbidden_library(tmp_path, monkeypatch):
             },
             suite,
         )
+
+
+@pytest.mark.parametrize(
+    ("deployment", "dependency", "error"),
+    [
+        ("12.0", "/usr/lib/libSystem.B.dylib", None),
+        ("13.0", "/usr/lib/libSystem.B.dylib", "requires macOS"),
+        ("12.0", "@rpath/libexample.dylib", "Non-system runtime dependency"),
+    ],
+)
+def test_macho_structural_policy(tmp_path, monkeypatch, deployment, dependency, error):
+    executable = tmp_path / "example"
+    executable.write_bytes(b"\xcf\xfa\xed\xfe" + struct.pack("<I", 0x0100000C))
+
+    def inspect(args, **kwargs):
+        output = (
+            f"Load command 1\n      cmd LC_SOURCE_VERSION\n  version 1267.0\n"
+            f"Load command 2\n      cmd LC_BUILD_VERSION\n    minos {deployment}\n"
+            if args[1] == "-l"
+            else f"{executable}:\n\t{dependency} (compatibility version 1.0.0, current version 1.0.0)\n"
+        )
+        return SimpleNamespace(stdout=output)
+
+    monkeypatch.setattr("muxtools_binaries.testing.run", inspect)
+    data = {"target": "macos-arm64", "binaries": {"example": {"baseline": "example"}}}
+    if error:
+        with pytest.raises(ValueError, match=error):
+            structural(tmp_path, data)
+    else:
+        structural(tmp_path, data)

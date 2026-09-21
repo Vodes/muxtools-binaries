@@ -6,7 +6,8 @@ target operating system. Release publication requires matching native test repor
 ## Structural checks
 
 Build jobs check executable format, target architecture, metadata references,
-required files, ELF symbol versions, and missing runtime libraries.
+required files, ELF symbol versions, and missing runtime libraries. Mach-O checks
+require ARM64, a deployment target no newer than macOS 12.0, and system-only dylib imports.
 They reject unsafe paths and invalid archive layouts.
 
 Declare wrappers and private executables in
@@ -17,6 +18,7 @@ Declare wrappers and private executables in
 Linux x86-64 jobs use Ubuntu 24.04, Linux and Windows ARM64 builds use Ubuntu
 24.04 ARM, and Windows x86-64 builds use Ubuntu 24.04. Windows smoke tests run
 on Windows Server 2022 for x86-64 and native `windows-11-arm` runners for ARM64.
+macOS ARM64 builds and smoke tests run on `macos-15`.
 The runner extracts each archive into a path that contains spaces. It invokes
 every baseline executable and runs the recipe's functional checks.
 

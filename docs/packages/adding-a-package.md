@@ -18,7 +18,8 @@ and its declared targets automatically.
 
 | Method | Manifest type | Starting example |
 | --- | --- | --- |
-| Compile an Autotools project | `source-build` | `packages/flac/` or `packages/wavpack/` |
+| Compile an Autotools project | `source-build` | `packages/flac/` |
+| Compile a CMake project | `source-build` | `packages/wavpack/` or `packages/x265/` |
 | Compile with custom steps | `source-build` | `packages/x265/` or `packages/mkvtoolnix/` |
 | Import a third-party build | `external-build` | `packages/ffmpeg/` |
 | Import an upstream release | `upstream-binary` | `packages/x264/` |
@@ -64,15 +65,32 @@ verified [asset per target](manifest.md#imported-asset-table) instead of `[sourc
 
 ## 3. Write the recipe
 
-An Autotools recipe can reuse the shared build and update helpers. This example
-also adds a functional check for the WavPack encoder:
+The source-build example above can use `BuildContext.cmake(..., install=True)`
+for all targets and then stage the installed programs. It also adds a functional
+encoder check:
 
 ```python
-from muxtools_binaries.build import AutotoolsOptions as Options
-from muxtools_binaries.build import build_autotools as build
+from muxtools_binaries.build import BuildContext
 from muxtools_binaries.checks import AudioCheck, CheckSuite, default_checks
-from muxtools_binaries.models import Package
+from muxtools_binaries.models import Model, Package
 from muxtools_binaries.updates import source_update as discover_update
+
+
+class Options(Model):
+    pass
+
+
+def build(ctx: BuildContext) -> None:
+    if ctx.package.source is None:
+        raise ValueError("Source build requires a source pin")
+    source = ctx.source(ctx.package.name, ctx.package.source)
+    ctx.cmake(
+        ctx.package.name,
+        source,
+        {"BUILD_TESTING": False, "WAVPACK_BUILD_PROGRAMS": True},
+        install=True,
+    )
+    ctx.stage_binaries()
 
 
 def checks(package: Package, target: str) -> CheckSuite:
@@ -92,7 +110,7 @@ __all__ = ["Options", "build", "checks", "discover_update"]
 ```
 
 All three hooks are required: `build`, `checks`, and `discover_update`.
-In this example, the shared helpers provide `build` and `discover_update`.
+In this example, the shared update helper provides `discover_update`.
 `default_checks` creates a smoke check for each executable, expecting exit code 0.
 Adjust the [smoke checks](recipes.md#smoke-commands) if a command returns a different
 exit code or needs an output check.

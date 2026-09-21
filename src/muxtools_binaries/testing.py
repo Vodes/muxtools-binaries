@@ -206,6 +206,28 @@ def structural(stage: Path, data: dict[str, Any], suite: CheckSuite | None = Non
                 if library.lower().startswith(("libgcc", "libstdc++", "libwinpthread")):
                     if not any(p.name.lower() == library.lower() for p in stage.rglob("*.dll")):
                         raise ValueError(f"Unbundled compiler runtime: {library}")
+        elif magic == b"\xcf\xfa\xed\xfe":
+            binary_format(path, data["target"])
+            loads = run(["otool", "-l", path], capture=True).stdout
+            deployment_versions = re.findall(
+                r"cmd LC_BUILD_VERSION(?:(?!Load command)[\s\S])*?^\s+minos (\d+(?:\.\d+){1,2})\s*$",
+                loads,
+                re.MULTILINE,
+            ) + re.findall(
+                r"cmd LC_VERSION_MIN_MACOSX(?:(?!Load command)[\s\S])*?^\s+version (\d+(?:\.\d+){1,2})\s*$",
+                loads,
+                re.MULTILINE,
+            )
+            if not deployment_versions:
+                raise ValueError(f"Missing macOS deployment target in {path.name}")
+            minimum_macos = max(tuple(map(int, version.split("."))) for version in deployment_versions)
+            if minimum_macos > (12, 0):
+                raise ValueError(f"{path.name} requires macOS {minimum_macos}, configured maximum is (12, 0)")
+            libraries = run(["otool", "-L", path], capture=True).stdout.splitlines()[1:]
+            for line in libraries:
+                dependency = line.strip().split(" ", 1)[0]
+                if dependency and not dependency.startswith(("/usr/lib/", "/System/Library/")):
+                    raise ValueError(f"Non-system runtime dependency: {dependency} in {path.name}")
 
 
 def exercise(
