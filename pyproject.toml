@@ -5,7 +5,7 @@ description = "Pinned portable binary builds and explicit releases"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "av>=16,<17",
+    "av>=18,<19",
     "httpx2>=2,<3",
     "numpy>=2,<3",
     "packaging>=25",
