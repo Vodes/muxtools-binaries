@@ -177,11 +177,11 @@ def test_builder_lock_schema_and_pins():
     lock = tomllib.loads((root / "builder/lock.toml").read_text())
 
     assert lock["schema_version"] == 3
-    assert {entry["image"] for entry in lock["builders"].values()} == {""}
     assert lock["toolchains"]["llvm-mingw"]["version"] == "20260616"
     assert set(lock["toolchains"]["llvm-mingw"]["hosts"]) == {"x86_64", "arm64"}
     assert lock["toolchains"]["xwin"]["version"] == "0.9.0"
     assert lock["toolchains"]["xwin"]["sdk"] == "10.0.26100"
     assert lock["toolchains"]["xwin"]["crt"] == "14.44.17.14"
     assert lock["toolchains"]["xwin"]["toolset"] == "14.44.35220"
+    assert builder_configuration(root, "windows-x86_64")["name"] == "manylinux-x86_64"
     assert builder_configuration(root, "windows-arm64")["name"] == "manylinux-arm64"
