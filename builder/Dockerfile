@@ -6,10 +6,10 @@ ARG BUILDER_ID=manylinux-x86_64
 RUN dnf install -y \
       gcc gcc-c++ clang llvm llvm-devel lld binutils \
       cmake ninja-build meson autoconf automake libtool gettext-devel pkgconf-pkg-config \
-      make patch perl bison flex zstd ruby rubygem-rake docbook-style-xsl libxslt ImageMagick inkscape \
+      make patch perl bison flex gperf zstd ruby rubygem-rake docbook-style-xsl libxslt ImageMagick inkscape \
     && if [ "$(uname -m)" = x86_64 ]; then \
       dnf install -y \
-        nasm yasm gperf texinfo \
+        nasm yasm texinfo \
         mingw64-gcc mingw64-gcc-c++ mingw64-headers mingw64-crt mingw64-winpthreads-static; \
     fi \
     && dnf clean all
