@@ -48,6 +48,9 @@ def _parser() -> argparse.ArgumentParser:
     updates = commands.add_parser("updates")
     updates.add_argument("--package")
     updates.add_argument("--apply", action="store_true")
+    hashes = commands.add_parser("hashes")
+    hashes.add_argument("packages", nargs="+")
+    hashes.add_argument("--refresh", action="store_true")
     return parser
 
 
@@ -211,6 +214,14 @@ def main() -> int:
             from .updates import discover
 
             discover(root, args.package, args.apply)
+        elif args.command == "hashes":
+            from .updates import fill_hashes
+
+            print(
+                json.dumps(
+                    {name: fill_hashes(root, name, args.refresh) for name in dict.fromkeys(args.packages)}, indent=2
+                )
+            )
     except (ValueError, OSError, subprocess.CalledProcessError, httpx2.HTTPError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

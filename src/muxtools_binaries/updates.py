@@ -120,6 +120,53 @@ def _apply_updates(document: MutableMapping[str, Any], updated: dict[str, Any]) 
             document[key] = value
 
 
+def fill_hashes(root: Path, name: str, refresh: bool = False) -> list[str]:
+    """Fill archive and asset hashes in one package manifest."""
+    if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
+        raise ValueError(f"Invalid package name: {name}")
+    path = root / "packages" / name / "package.toml"
+    if not path.is_file():
+        raise ValueError(f"Unknown package: {name}")
+
+    original = path.read_text()
+    data = tomllib.loads(original)
+    if data.get("name") != name:
+        raise ValueError(f"Package name must match directory: {path}")
+
+    pins: list[tuple[str, dict[str, Any]]] = []
+    source = data.get("source")
+    if isinstance(source, dict) and "url" in source:
+        pins.append(("source.sha256", source))
+    for dependency, pin in data.get("dependencies", {}).items():
+        if "url" in pin:
+            pins.append((f"dependencies.{dependency}.sha256", pin))
+    for target, config in data.get("targets", {}).items():
+        if "asset" in config:
+            pins.append((f"targets.{target}.asset.sha256", config["asset"]))
+
+    changes: list[str] = []
+    digests: dict[str, str] = {}
+    for field, pin in pins:
+        if not refresh and pin.get("sha256"):
+            continue
+        url = pin.get("url")
+        if not isinstance(url, str) or not url.startswith("https://"):
+            raise ValueError(f"Invalid HTTPS URL for {field}: {url!r}")
+        if url not in digests:
+            digests[url] = remote_hash(url)
+        digest = digests[url]
+        if pin.get("sha256") != digest:
+            pin["sha256"] = digest
+            changes.append(field)
+
+    Package.model_validate(data)
+    if changes:
+        document = tomlkit.parse(original)
+        _apply_updates(document, data)
+        path.write_text(tomlkit.dumps(document))
+    return changes
+
+
 def discover(root: Path, name: str | None, apply: bool) -> None:
     changes = []
     for package in load_packages(root, [name] if name else None).values():

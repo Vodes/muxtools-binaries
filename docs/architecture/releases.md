@@ -89,3 +89,12 @@ uv run muxtools-build updates --package flac
 
 Add `--apply` to update the manifest, then run the development checks.
 See [update hooks](../packages/recipes.md#update-hook) for recipe behavior.
+
+To fill missing archive-source and imported-asset SHA-256 values, run
+`uv run muxtools-build hashes` with the package names
+you want to update.<br> 
+It writes the hashes immediately, including absent or empty
+values.<br>
+Add `--refresh` to download and recalculate existing hashes too. The
+command leaves `version_code` unchanged; increase it when preparing a changed
+release definition.
