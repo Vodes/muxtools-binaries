@@ -166,7 +166,7 @@ def test_native_metadata_omits_image_and_records_apple_linker_stderr(package, mo
         "backend": "native-macos-arm64",
         "revision": "revision",
     }
-    assert data["build"]["linker_version"] == "Apple ld 123\nsupported architectures: arm64"
+    assert data["build"]["linker_version"] == "Apple ld 123"
 
 
 @pytest.mark.parametrize("kind", ["zip", "tar", "7z"])

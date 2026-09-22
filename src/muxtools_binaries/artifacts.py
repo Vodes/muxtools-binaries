@@ -63,6 +63,7 @@ def metadata(package: Package, target: str, revision: str, image: str | None, ch
             linker_version = "\n".join(
                 output.strip() for output in (linker_result.stdout, linker_result.stderr) if output.strip()
             )
+            linker_version = linker_version.splitlines()[0]
         else:
             linker_version = linker_result.stdout.splitlines()[0]
         data["build"].update(
