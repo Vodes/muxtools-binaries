@@ -2,8 +2,8 @@ schema_version = 1
 name = "wavpack"
 # Upstream description: https://www.wavpack.com/
 description = "Hybrid Lossless Audio Compression"
-version = "5.9.0.post2"
-version_code = 3
+version = "5.9.0.post1"
+version_code = 2
 type = "source-build"
 
 [source]
@@ -13,24 +13,19 @@ commit = "5803634a030e2a11dba602ba057b89cc34486c67"
 
 [targets.linux-x86_64]
 toolchain = "gcc"
-lto = false
-cpu_levels = ["baseline"]
+
+[targets.linux-arm64]
+toolchain = "gcc"
 
 [targets.windows-x86_64]
 toolchain = "gcc"
-lto = false
-cpu_levels = ["baseline"]
 
 [targets.windows-arm64]
-toolchain = "clang-msvc"
-lto = false
-cpu_levels = ["baseline"]
+toolchain = "clang-msvc"  # More of a practical example here, xwin based msvc-abi target
 extra_ldflags = ["-luser32", "-lshell32"]
 
 [targets.macos-arm64]
 toolchain = "clang"
-lto = false
-cpu_levels = ["baseline"]
 
 [executables]
 wavpack = ["--version"]

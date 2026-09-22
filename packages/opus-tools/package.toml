@@ -2,8 +2,8 @@ schema_version = 1
 name = "opus-tools"
 # Upstream description: https://github.com/xiph/opus-tools
 description = "A set of tools to encode, inspect, and decode audio in the Opus format."
-version = "0.2-libopus-1.6.1"
-version_code = 2
+version = "0.2-libopus-1.6.1+1"
+version_code = 3
 type = "source-build"
 
 [build.dependencies]
@@ -41,15 +41,27 @@ tag = "1.5.0"
 commit = "1507800de4b70e21be71f38caa0d9079d0bc6e45"
 
 [targets.linux-x86_64]
-toolchain = "gcc"
-lto = false
-cpu_levels = ["baseline"]
+toolchain = "clang"
+lto = "thin"
+cpu_levels = ["baseline"]  # Default
+
+[targets.linux-arm64]
+toolchain = "clang"
+lto = "thin"
 
 [targets.windows-x86_64]
-toolchain = "gcc"
-lto = false
-cpu_levels = ["baseline"]
+toolchain = "clang"
+lto = "thin"
 extra_cflags = ["-DFLAC__NO_DLL"]
+
+[targets.windows-arm64]
+toolchain = "clang"
+lto = "thin"
+extra_cflags = ["-DFLAC__NO_DLL"]
+
+[targets.macos-arm64]
+toolchain = "clang"
+lto = "thin"
 
 [executables]
 opusenc = ["--version"]

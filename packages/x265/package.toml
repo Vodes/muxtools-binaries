@@ -2,8 +2,8 @@ schema_version = 1
 name = "x265"
 # Upstream description: https://www.x265.org/
 description = "HEVC/H.265 Encoder"
-version = "4.2.post1"
-version_code = 2
+version = "4.2.post2"
+version_code = 3
 type = "source-build"
 
 [build]
@@ -31,10 +31,28 @@ extra_ldflags = ["-shared-libgcc", "-Wl,--strip-debug"]
 [targets.linux-x86_64.runtime]
 requirements = ["libgcc_s.so.1"]
 
+[targets.linux-arm64]
+toolchain = "clang"
+lto = "thin"
+extra_ldflags = ["-Wl,--strip-debug"]
+
+[targets.linux-arm64.runtime]
+requirements = ["libgcc_s.so.1"]
+
 [targets.windows-x86_64]
 toolchain = "clang"
 lto = "thin"
 cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
+extra_ldflags = ["-Wl,--strip-debug"]
+
+[targets.windows-arm64]
+toolchain = "clang"
+lto = "thin"
+extra_ldflags = ["-Wl,--strip-debug"]
+
+[targets.macos-arm64]
+toolchain = "clang"
+lto = "thin"
 extra_ldflags = ["-Wl,--strip-debug"]
 
 [executables]

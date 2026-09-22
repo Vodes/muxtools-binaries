@@ -2,8 +2,8 @@ schema_version = 1
 name = "flac"
 # Upstream description: https://github.com/xiph/flac
 description = "Free Lossless Audio Codec"
-version = "1.5.0.post4"
-version_code = 5
+version = "1.5.0.post2"
+version_code = 3
 type = "source-build"
 
 [build]
@@ -20,29 +20,27 @@ tag = "v1.3.6"
 commit = "be05b13e98b048f0b5a0f5fa8ce514d56db5f822"
 
 [targets.linux-x86_64]
-toolchain = "gcc"
-lto = false
-cpu_levels = ["baseline"]
-
-[targets.windows-x86_64]
-toolchain = "gcc"
-lto = false
-cpu_levels = ["baseline"]
+toolchain = "clang"
+lto = "thin"
+cpu_levels = ["baseline"]  # Default
 
 [targets.linux-arm64]
-toolchain = "gcc"
-lto = false
-cpu_levels = ["baseline"]
+toolchain = "clang"
+lto = "thin"
+
+[targets.windows-x86_64]
+toolchain = "clang"
+lto = "thin"
+extra_cflags = ["-DFLAC__NO_DLL"]
 
 [targets.windows-arm64]
 toolchain = "clang"
-lto = false
-cpu_levels = ["baseline"]
+lto = "thin"
+extra_cflags = ["-DFLAC__NO_DLL"]
 
 [targets.macos-arm64]
 toolchain = "clang"
-lto = false
-cpu_levels = ["baseline"]
+lto = "thin"
 
 [executables]
 flac = ["--version"]
