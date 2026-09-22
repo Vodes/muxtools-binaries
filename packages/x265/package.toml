@@ -2,8 +2,8 @@ schema_version = 1
 name = "x265"
 # Upstream description: https://www.x265.org/
 description = "HEVC/H.265 Encoder"
-version = "4.2.post2"
-version_code = 3
+version = "4.3"
+version_code = 4
 type = "source-build"
 
 [build]
@@ -17,9 +17,9 @@ ENABLE_ASSEMBLY = true
 ENABLE_LIBNUMA = false
 
 [source]
-repository = "https://bitbucket.org/multicoreware/x265_git.git"
-tag = "4.2"
-commit = "e444744c03978c1fb4e037168967020cf2648427"
+repository = "https://github.com/Multicorewareinc/x265.git"
+tag = "4.3"
+commit = "e9b88125dc21393b3fd8d68e98083bdfb89778a8"
 
 # Upstream already uses -O3 in the release profile so we're not specifying any flags here
 [targets.linux-x86_64]
