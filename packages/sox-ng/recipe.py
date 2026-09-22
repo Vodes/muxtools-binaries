@@ -1,5 +1,6 @@
 import re
 import subprocess
+from pathlib import Path
 from typing import Any
 
 from packaging.version import Version
@@ -9,6 +10,15 @@ from muxtools_binaries.checks import AudioCheck, CheckSuite, CommandCheck, defau
 from muxtools_binaries.io import run
 from muxtools_binaries.models import Package
 from muxtools_binaries.updates import UpdateContext, latest_tag
+
+
+def _fix_vorbis_darwin_flags(source: Path) -> None:
+    configure_ac = source / "configure.ac"
+    contents = configure_ac.read_text()
+    obsolete = " -force_cpusubtype_ALL"
+    if contents.count(obsolete) != 3:
+        raise ValueError("Cannot locate Vorbis's obsolete Darwin compiler flags")
+    configure_ac.write_text(contents.replace(obsolete, ""))
 
 
 def build(ctx: BuildContext) -> None:
@@ -30,7 +40,10 @@ def build(ctx: BuildContext) -> None:
     ctx.autotools(
         "flac", ctx.source("flac", ctx.package.dependencies["flac"]), ["--disable-doxygen-docs", "--disable-cpplibs"]
     )
-    ctx.autotools("vorbis", ctx.source("vorbis", ctx.package.dependencies["vorbis"]))
+    vorbis = ctx.source("vorbis", ctx.package.dependencies["vorbis"])
+    if ctx.target_info.os == "macos":
+        _fix_vorbis_darwin_flags(vorbis)
+    ctx.autotools("vorbis", vorbis)
     ctx.autotools("png", ctx.source("png", ctx.package.dependencies["png"]))
     ctx.autotools("lame", ctx.source("lame", ctx.package.dependencies["lame"]), ["--disable-frontend"])
     ctx.autotools(

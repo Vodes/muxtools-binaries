@@ -2,8 +2,8 @@ schema_version = 1
 name = "sox-ng"
 # Upstream description: https://codeberg.org/sox_ng/sox_ng
 description = "SoX_ng audio conversion and inspection tools, packaged as sox and soxi."
-version = "14.8.1"
-version_code = 1
+version = "14.8.1.post1"
+version_code = 2
 type = "source-build"
 
 [source]
@@ -72,15 +72,26 @@ sha256 = "5630c24cdeb33b131612f7eb4b1a9934234754f9f388ff8617458d0be6f239a1"
 format = "tar.gz"
 
 [targets.linux-x86_64]
-toolchain = "gcc"
-lto = false
-cpu_levels = ["baseline"]
+toolchain = "clang"
+lto = "thin"
+
+[targets.linux-arm64]
+toolchain = "clang"
+lto = "thin"
 
 [targets.windows-x86_64]
-toolchain = "gcc"
-lto = false
-cpu_levels = ["baseline"]
+toolchain = "clang"
+lto = "thin"
 extra_cflags = ["-DFLAC__NO_DLL"]
+
+[targets.windows-arm64]
+toolchain = "clang"
+lto = "thin"
+extra_cflags = ["-DFLAC__NO_DLL"]
+
+[targets.macos-arm64]
+toolchain = "clang"
+lto = "thin"
 
 [executables]
 sox = ["--version"]
