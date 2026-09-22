@@ -140,7 +140,10 @@ class Package(Model):
 def load_packages(root: Path, names: list[str] | None = None) -> dict[str, Package]:
     packages = {}
     for path in sorted((root / "packages").glob("*/package.toml")):
-        package = Package.model_validate(tomllib.loads(path.read_text()))
+        try:
+            package = Package.model_validate(tomllib.loads(path.read_text()))
+        except ValueError as error:
+            raise ValueError(f"Invalid package {path.parent.name} ({path}):\n{error}") from error
         if package.name != path.parent.name:
             raise ValueError(f"Package name must match directory: {path}")
         packages[package.name] = package
