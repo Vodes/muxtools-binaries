@@ -1,6 +1,7 @@
 import re
-import shutil
 from typing import Any
+
+from packaging.version import Version
 
 from muxtools_binaries.build import BuildContext
 from muxtools_binaries.checks import default_checks as checks
@@ -21,46 +22,41 @@ def build(ctx: BuildContext) -> None:
     extension = ctx.target_info.executable_suffix
 
     for name in ctx.package.executables:
-        matches = list(unpacked.rglob(name + extension))
+        matches = list(filter(lambda f: f.is_file(), unpacked.rglob(name + extension)))
         if len(matches) != 1:
             raise ValueError(f"Expected exactly one imported {name}")
         ctx.stage_binary(matches[0], name)
-    for path in unpacked.rglob("*"):
-        if path.is_file() and (
-            path.name.upper().startswith(("LICENSE", "COPYING", "NOTICE")) or "license" in path.parts
-        ):
-            output = ctx.stage / "licenses" / path.relative_to(unpacked)
-            output.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(path, output)
 
 
 def discover_update(ctx: UpdateContext) -> dict[str, Any]:
     data, updated = ctx.original, ctx.data
     repository = UpdateOptions.model_validate(data["update"]).repository
     releases = ctx.get_json(f"https://api.github.com/repos/{repository}/releases?per_page=100")
-    release = next(
-        (r for r in releases if not r["draft"] and not r["prerelease"] and r["tag_name"].startswith("autobuild-")),
-        None,
-    )
-    if not release:
-        raise ValueError("No dated FFmpeg release available")
-    source_versions = set()
+    candidates = []
+    for release in releases:
+        if release["draft"] or release["prerelease"]:
+            continue
+        match = re.fullmatch(r"v(\d+(?:\.\d+)+)-r(\d+)-nonfree", release["tag_name"])
+        if match:
+            candidates.append((Version(match[1]), int(match[2]), release))
+    if not candidates:
+        raise ValueError("No nonfree FFmpeg release available")
+    source_version, revision, release = max(candidates, key=lambda candidate: candidate[:2])
+
     for target, config in updated["targets"].items():
-        suffix = r"linux64-nonfree-[\d.]+\.tar\.xz" if target.startswith("linux") else r"win64-nonfree-[\d.]+\.zip"
-        pattern = r"ffmpeg-n(\d+(?:\.\d+)+(?:-\d+-g[0-9a-f]+)?)-" + suffix
-        matches = [(a, re.fullmatch(pattern, a["name"])) for a in release["assets"]]
-        matches = [(asset, match) for asset, match in matches if match]
+        name = f"ffmpeg-{source_version}-{target}-nonfree.tar.zst"
+        matches = [asset for asset in release["assets"] if asset["name"] == name]
         if len(matches) != 1:
             raise ValueError(f"Ambiguous or missing FFmpeg artifact for {target}")
-        asset, match = matches[0]
-        source_versions.add(match[1])
-        config["asset"]["url"] = asset["browser_download_url"]
-        config["asset"]["sha256"] = (asset.get("digest") or "").removeprefix("sha256:") or ctx.remote_hash(
-            asset["browser_download_url"]
+        asset = matches[0]
+        url = asset["browser_download_url"]
+        digest = (asset.get("digest") or "").removeprefix("sha256:")
+        config["asset"]["sha256"] = digest or (
+            config["asset"]["sha256"] if url == config["asset"]["url"] else ctx.remote_hash(url)
         )
-    if len(source_versions) != 1:
-        raise ValueError("FFmpeg targets have different source versions")
-    updated["version"] = source_versions.pop() + "-" + release["tag_name"][10:20]
+        config["asset"]["url"] = url
+        config["asset"]["format"] = "tar.zst"
+    updated["version"] = f"{source_version}-r{revision}"
     return updated
 
 

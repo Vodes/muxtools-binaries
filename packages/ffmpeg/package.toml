@@ -2,27 +2,51 @@ schema_version = 1
 name = "ffmpeg"
 # Upstream description: https://ffmpeg.org/
 description = "A complete, cross-platform solution to record, convert and stream audio and video."
-version = "9.0.1-27-g9b0578816c-2026-09-10"
-version_code = 3
+version = "9.0.2-r2"
+version_code = 4
 type = "external-build"
-provider = "Vodes/FFmpeg-Builds"
+provider = "Vodes/ffmpeg-mt"
 
 [targets.linux-x86_64.runtime]
 requirements = ["libgcc_s.so.1"]
 
 [targets.linux-x86_64.asset]
-url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-09-10-11-08/ffmpeg-n9.0.1-27-g9b0578816c-linux64-nonfree-9.0.tar.xz"
-sha256 = "a07e6f81e1b94598286da27cb6107097eaf13a11918ebb51fba23e5ca2d1d928"
-format = "tar.xz"
+url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.0.2-r2-nonfree/ffmpeg-9.0.2-linux-x86_64-nonfree.tar.zst"
+sha256 = "9bb9e30616482cc3eb5c804aa4d4dec2c7f6505250f8b50a45ffaf4022e11d15"
+format = "tar.zst"
+
+[targets.linux-arm64.runtime]
+requirements = ["libgcc_s.so.1"]
+
+[targets.linux-arm64.asset]
+url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.0.2-r2-nonfree/ffmpeg-9.0.2-linux-arm64-nonfree.tar.zst"
+sha256 = "e59fe7f64f53ceb6a4ae941bfc34de74260dba2232ef9c0a4640662b267c0ac5"
+format = "tar.zst"
 
 [targets.windows-x86_64.asset]
-url = "https://github.com/Vodes/FFmpeg-Builds/releases/download/autobuild-2026-09-10-11-08/ffmpeg-n9.0.1-27-g9b0578816c-win64-nonfree-9.0.zip"
-sha256 = "3207c95d26640588bcf3a675842402c530f042d4047b551f6735cb0ac636e43d"
-format = "zip"
+url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.0.2-r2-nonfree/ffmpeg-9.0.2-windows-x86_64-nonfree.tar.zst"
+sha256 = "0526f559f73c7630e2e5fc0dc2338d59921c2e0a4a2a8a4dbfa392162645766a"
+format = "tar.zst"
+
+[targets.windows-arm64]
+toolchain = "clang"  # we're not compiling this but we need this to not be default
+
+[targets.windows-arm64.asset]
+url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.0.2-r2-nonfree/ffmpeg-9.0.2-windows-arm64-nonfree.tar.zst"
+sha256 = "ee058d6f722c0e9beb71b8660ddd0dcae671d6b35ec7998b6be2d4898cb29fb2"
+format = "tar.zst"
+
+[targets.macos-arm64]
+toolchain = "clang"  # we're not compiling this but we need this to not be default
+
+[targets.macos-arm64.asset]
+url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.0.2-r2-nonfree/ffmpeg-9.0.2-macos-arm64-nonfree.tar.zst"
+sha256 = "87fdb5f05952ec65af13a2342b2a83b511617fb3d1e5d3e45b1ca4a41bc1c723"
+format = "tar.zst"
 
 [executables]
 ffmpeg = ["-version"]
 ffprobe = ["-version"]
 
 [update]
-repository = "Vodes/FFmpeg-Builds"
+repository = "Vodes/ffmpeg-mt"

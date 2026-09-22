@@ -6,39 +6,63 @@ from muxtools_binaries.recipes import load_recipe
 from muxtools_binaries.updates import UpdateContext
 
 recipe = load_recipe(Path(__file__).resolve().parents[3], "ffmpeg")
+TARGETS = ("linux-x86_64", "linux-arm64", "windows-x86_64", "windows-arm64", "macos-arm64")
 
 
-@pytest.mark.parametrize("version", ["2.0", "2.0-1-gabcdef"])
-def test_ffmpeg_asset_selection(monkeypatch, version):
-    data = dict(
-        version="old",
-        version_code=1,
-        targets={target: {} for target in ("linux-x86_64", "windows-x86_64")},
-        executables={"ffmpeg": ["-version"]},
-    )
-    data.update(
+def _definition() -> dict:
+    return dict(
         name="ffmpeg",
+        version="9.0.1-r1",
+        version_code=1,
         type="external-build",
-        source=None,
-        update={"repository": "example/builds"},
+        targets={
+            target: {"asset": {"url": f"https://example.test/old-{target}", "sha256": "0" * 64, "format": "tar.zst"}}
+            for target in TARGETS
+        },
+        executables={"ffmpeg": ["-version"]},
+        update={"repository": "example/ffmpeg-mt"},
     )
-    assets = [
-        dict(
-            name=f"ffmpeg-n{version}-{suffix}",
-            browser_download_url="https://example.test/" + suffix,
-            digest="sha256:" + "0" * 64,
-        )
-        for suffix in ("linux64-nonfree-2.0.tar.xz", "win64-nonfree-2.0.zip", "win64-nonfree-shared-2.0.zip")
-    ]
-    for target, config in data["targets"].items():
-        config["asset"] = dict(
-            url="https://example.test/old", sha256="0" * 64, format="zip" if target.startswith("windows") else "tar.xz"
-        )
-    release = dict(tag_name="autobuild-2000-01-01-00-00", draft=False, prerelease=False, assets=assets)
-    monkeypatch.setattr("muxtools_binaries.updates.get_json", lambda _: [dict(release, tag_name="latest"), release])
+
+
+def _release(tag: str) -> dict:
+    version = tag.removeprefix("v").split("-r", 1)[0]
+    return dict(
+        tag_name=tag,
+        draft=False,
+        prerelease=False,
+        assets=[
+            dict(
+                name=f"ffmpeg-{version}-{target}-nonfree.tar.zst",
+                browser_download_url=f"https://example.test/{version}/{target}.tar.zst",
+                digest="sha256:" + "1" * 64,
+            )
+            for target in TARGETS
+        ],
+    )
+
+
+def test_ffmpeg_selects_latest_nonfree_release_and_target_assets(monkeypatch):
+    data = _definition()
+    release = _release("v9.0.2-r2-nonfree")
+    release["assets"][0]["digest"] = None
+    release["assets"].append(dict(name="ffmpeg-9.0.2-linux-x86_64-free.tar.zst"))
+    old = _release("v9.0.1-r2-nonfree")
+    draft = dict(_release("v9.0.3-r2-nonfree"), draft=True)
+    monkeypatch.setattr("muxtools_binaries.updates.get_json", lambda _: [old, draft, release])
+    calls = []
+
+    def remote_hash(url):
+        calls.append(url)
+        return "2" * 64
+
+    monkeypatch.setattr("muxtools_binaries.updates.remote_hash", remote_hash)
     result = recipe.discover_update(UpdateContext(data))
-    assert result["version"] == version + "-2000-01-01"
-    assert "shared" not in result["targets"]["windows-x86_64"]["asset"]["url"]
-    assets.append(assets[0])
+    assert result["version"] == "9.0.2-r2"
+    assert result["targets"]["linux-x86_64"]["asset"]["sha256"] == "2" * 64
+    assert result["targets"]["macos-arm64"]["asset"]["sha256"] == "1" * 64
+    assert all(result["targets"][target]["asset"]["url"].endswith(f"/{target}.tar.zst") for target in TARGETS)
+    assert calls == [release["assets"][0]["browser_download_url"]]
+
+    release["assets"].append(release["assets"][0])
     with pytest.raises(ValueError, match="Ambiguous"):
         recipe.discover_update(UpdateContext(data))

@@ -55,7 +55,7 @@ class ArchiveSource(Model):
 class Asset(Model):
     url: str = Field(pattern=r"^https://")
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    format: Literal["zip", "tar.xz", "7z", "appimage", "binary"]
+    format: Literal["zip", "tar.xz",  "tar.zst", "7z", "appimage", "binary"]
 
 
 class Runtime(Model):
