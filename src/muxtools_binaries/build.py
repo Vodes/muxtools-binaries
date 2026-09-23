@@ -4,6 +4,7 @@ import re
 import shlex
 import shutil
 import tempfile
+import time
 import tomllib
 from collections.abc import Sequence
 from pathlib import Path
@@ -63,6 +64,8 @@ class BuildContext:
         self.cache = root / "build" / "downloads"
         self.tier = "baseline"
         self.shared_prefix: Path | None = None
+        epoch = os.environ.get("SOURCE_DATE_EPOCH")
+        self.build_epoch = int(epoch) if epoch is not None else int(time.time())
 
     def source(self, name: str, pin: GitSource | ArchiveSource) -> Path:
         if isinstance(pin, ArchiveSource):
@@ -175,7 +178,7 @@ class BuildContext:
             PKG_CONFIG_LIBDIR=str(self.prefix / "lib/pkgconfig"),
             PKG_CONFIG_PATH="",
             PKG_CONFIG_SYSROOT_DIR="",
-            SOURCE_DATE_EPOCH="0",
+            SOURCE_DATE_EPOCH=str(self.build_epoch),
         )
         if self.target_info.os == "macos":
             env["MACOSX_DEPLOYMENT_TARGET"] = "12.0"

@@ -3,11 +3,11 @@ schema_version = 3
 [builders.manylinux-x86_64]
 base = "quay.io/pypa/manylinux_2_34_x86_64@sha256:934419fa742ff922855f464203cc0ad5afe3317a8541712a00cf3dc7fb893fc8"
 # Replace these after qualifying and publishing a changed builder image.
-image = "ghcr.io/vodes/muxtools-builder@sha256:be3765060318f578348c3c8e34f1d77cf1b0ffe6ee6c4dcdb39f0068ce06a241"
+image = "ghcr.io/vodes/muxtools-builder@sha256:deecc8cd9b937ca31204d5e422b2fda7dd597446a207e62c64bac278d800c9c3"
 
 [builders.manylinux-arm64]
 base = "quay.io/pypa/manylinux_2_34_aarch64@sha256:db1a485b015c1d9a6d7e2929367a69a6f772964be06cca8fe585f959a47ec0b7"
-image = "ghcr.io/vodes/muxtools-builder@sha256:1a6a9dd11d4d7365ac39878a8920b53b86e7990af679c1b60181c079e5862050"
+image = "ghcr.io/vodes/muxtools-builder@sha256:369fbb594464072d6eec51e3dd4833f75ef681e8c52b9a3399dd7451424fb76f"
 
 [toolchains.llvm-mingw]
 version = "20260616"

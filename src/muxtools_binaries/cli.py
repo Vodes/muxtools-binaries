@@ -112,6 +112,7 @@ def _build_in_container(root: Path, args: argparse.Namespace, image: str, revisi
     user: list[str] = []
     if sys.platform != "win32":
         user = ["--user", f"{os.getuid()}:{os.getgid()}"]
+    source_date_epoch = os.environ.get("SOURCE_DATE_EPOCH")
     run(
         [
             "docker",
@@ -128,6 +129,7 @@ def _build_in_container(root: Path, args: argparse.Namespace, image: str, revisi
             "UV_PROJECT_ENVIRONMENT=/tmp/muxtools-venv",
             "-e",
             "UV_CACHE_DIR=/tmp/uv-cache",
+            *(["-e", f"SOURCE_DATE_EPOCH={source_date_epoch}"] if source_date_epoch is not None else []),
             image,
             "uv",
             "run",
