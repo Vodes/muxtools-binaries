@@ -1,0 +1,69 @@
+schema_version = 1
+name = "svtav1-essential"
+description = "SVT-AV1 Essential encoder with FFMS2 input and WebM output"
+version = "4.0.1"
+version_code = 1
+type = "source-build"
+
+[source]
+repository = "https://github.com/nekotrix/SVT-AV1-Essential.git"
+tag = "v4.0.1-Essential"
+commit = "7b064486c2f3996e9371593bb6c4ab6e1ba41b9f"
+
+[dependencies.dovi]
+repository = "https://github.com/quietvoid/dovi_tool.git"
+tag = "2.3.4"
+commit = "614c816b6446dcd1dbaf433403d499a6026fbb5a"
+
+[dependencies.hdr10plus]
+repository = "https://github.com/quietvoid/hdr10plus_tool.git"
+tag = "libhdr10plus-2.1.5"
+commit = "ec9613eb257bd92130a446e2ce155685a243bd1d"
+
+[dependencies.zlib]
+repository = "https://github.com/madler/zlib.git"
+tag = "v1.3.2"
+commit = "da607da739fa6047df13e66a2af6b8bec7c2a498"
+
+[dependencies.ffmpeg]
+url = "https://ffmpeg.org/releases/ffmpeg-9.0.2.tar.xz"
+sha256 = "8c3850283eb25fa026482078a04051e0be17347b09ef81a0849bec15a96e002e"
+format = "tar.xz"
+
+[dependencies.ffms2]
+repository = "https://github.com/FFMS/ffms2.git"
+tag = "5.0"
+commit = "7ed5e4d039ca9a6236bd2ebdfdd656c4304fbe04"
+
+[targets.linux-x86_64]
+toolchain = "clang"
+lto = "thin"
+cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
+extra_ldflags = ["-shared-libgcc", "-Wl,--strip-debug"]
+
+[targets.linux-x86_64.runtime]
+requirements = ["libgcc_s.so.1", "libatomic.so.1"]
+
+[targets.linux-arm64]
+toolchain = "clang"
+lto = "thin"
+extra_ldflags = ["-shared-libgcc", "-Wl,--strip-debug"]
+
+[targets.linux-arm64.runtime]
+requirements = ["libgcc_s.so.1", "libatomic.so.1"]
+
+[targets.windows-x86_64]
+toolchain = "clang"
+lto = "thin"
+cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
+
+[targets.windows-arm64]
+toolchain = "clang"
+lto = "thin"
+
+[targets.macos-arm64]
+toolchain = "clang"
+lto = "thin"
+
+[executables]
+SvtAv1EncApp = ["--version"]

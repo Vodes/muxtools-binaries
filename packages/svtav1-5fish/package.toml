@@ -1,0 +1,54 @@
+schema_version = 1
+name = "svtav1-5fish"
+description = "5fish SVT-AV1 encoder"
+version = "2.3.260829"
+version_code = 1
+type = "source-build"
+
+[source]
+repository = "https://github.com/5fish/SVT-AV1.git"
+tag = "v2.3.260829"
+commit = "7f847c6b4b6115cd0454f95a4494f87d5acca8a4"
+
+[dependencies.dovi]
+repository = "https://github.com/quietvoid/dovi_tool.git"
+tag = "2.3.4"
+commit = "614c816b6446dcd1dbaf433403d499a6026fbb5a"
+
+[dependencies.hdr10plus]
+repository = "https://github.com/quietvoid/hdr10plus_tool.git"
+tag = "libhdr10plus-2.1.5"
+commit = "ec9613eb257bd92130a446e2ce155685a243bd1d"
+
+[targets.linux-x86_64]
+toolchain = "clang"
+lto = "thin"
+cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
+extra_ldflags = ["-shared-libgcc", "-Wl,--strip-debug"]
+
+[targets.linux-x86_64.runtime]
+requirements = ["libgcc_s.so.1"]
+
+[targets.linux-arm64]
+toolchain = "clang"
+lto = "thin"
+extra_ldflags = ["-shared-libgcc", "-Wl,--strip-debug"]
+
+[targets.linux-arm64.runtime]
+requirements = ["libgcc_s.so.1"]
+
+[targets.windows-x86_64]
+toolchain = "clang"
+lto = "thin"
+cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
+
+[targets.windows-arm64]
+toolchain = "clang"
+lto = "thin"
+
+[targets.macos-arm64]
+toolchain = "clang"
+lto = "thin"
+
+[executables]
+SvtAv1EncApp = ["--version"]
