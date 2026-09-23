@@ -70,6 +70,8 @@ uv run muxtools-build build PACKAGE --target macos-arm64
 uv run muxtools-build test dist/PACKAGE-VERSION-macos-arm64.tar.zst
 ```
 
+For the SVT-AV1 packages, also install `cargo-c` with Homebrew and use Rust 1.95.0.
+
 The build command prints the exact archive path. Native builds enforce macOS 12.0
 compatibility and reject non-system dylib dependencies.
 

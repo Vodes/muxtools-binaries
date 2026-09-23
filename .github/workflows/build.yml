@@ -97,6 +97,24 @@ jobs:
       - name: Install native build tools
         if: matrix.builder_kind == 'native'
         run: brew install autoconf automake libtool pkg-config cmake ninja docbook-xsl libxslt
+      - name: Install SVT-AV1 Rust tools
+        if: matrix.builder_kind == 'native' && startsWith(matrix.package, 'svtav1-')
+        env:
+          RUST_VERSION: "1.95.0"
+          RUSTUP_VERSION: "1.28.2"
+          RUSTUP_SHA256: "20ef5516c31b1ac2290084199ba77dbbcaa1406c45c1d978ca68558ef5964ef5"
+        run: |
+          rustup_init="$RUNNER_TEMP/rustup-init"
+          curl -fL --retry 5 -o "$rustup_init" \
+            "https://static.rust-lang.org/rustup/archive/${RUSTUP_VERSION}/aarch64-apple-darwin/rustup-init"
+          echo "${RUSTUP_SHA256}  ${rustup_init}" | shasum -a 256 -c -
+          chmod 0755 "$rustup_init"
+          "$rustup_init" -y --default-toolchain none --profile minimal
+          "$HOME/.cargo/bin/rustup" toolchain install "$RUST_VERSION" --profile minimal
+          "$HOME/.cargo/bin/rustup" default "$RUST_VERSION"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          rm -f "$rustup_init"
+          brew install cargo-c
       - name: Build package in container
         if: matrix.builder_kind == 'container'
         env:

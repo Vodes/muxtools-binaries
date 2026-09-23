@@ -22,6 +22,12 @@ class AutotoolsOptions(Model):
     dependencies: dict[str, list[str]] = Field(default_factory=dict)
 
 
+WINDOWS_RUST_TARGETS = {
+    "windows-x86_64": "x86_64-pc-windows-gnu",
+    "windows-arm64": "aarch64-pc-windows-gnullvm",
+}
+
+
 def _needs_mingw_host(source: Path) -> bool:
     for name in ("configure.ac", "configure.in"):
         path = source / name
@@ -56,6 +62,7 @@ class BuildContext:
         self.windows = self.target_info.os == "windows"
         self.cache = root / "build" / "downloads"
         self.tier = "baseline"
+        self.shared_prefix: Path | None = None
 
     def source(self, name: str, pin: GitSource | ArchiveSource) -> Path:
         if isinstance(pin, ArchiveSource):
@@ -104,7 +111,7 @@ class BuildContext:
 
     @property
     def prefix(self) -> Path:
-        return self.work / self.tier / "prefix"
+        return self.shared_prefix or self.work / self.tier / "prefix"
 
     def build_environment(self) -> dict[str, str]:
         removed = {
@@ -179,6 +186,16 @@ class BuildContext:
     def environment(self) -> dict[str, str]:
         return self.build_environment()
 
+    def dependency_environment(self) -> dict[str, str]:
+        env = self.environment()
+        env["CMAKE_PREFIX_PATH"] = str(self.prefix)
+        env["PKG_CONFIG_LIBDIR"] = os.pathsep.join(
+            (str(self.prefix / "lib/pkgconfig"), str(self.prefix / "share/pkgconfig"))
+        )
+        env["PKG_CONFIG"] = "pkg-config"
+        env["PATH"] = os.pathsep.join((str(self.prefix / "bin"), env.get("PATH", "")))
+        return env
+
     def host_environment(self) -> dict[str, str]:
         builder = BUILDERS[self.target_info.builder]
         if self.target_info.name == builder.host_target:
@@ -235,6 +252,42 @@ class BuildContext:
         run(args, cwd=build, env=env)
         run(["make", f"-j{self.jobs}"], cwd=build, env=env)
         run(["make", "install"], cwd=build, env=env)
+
+    def cargo_cinstall(
+        self,
+        crate: Path,
+        *,
+        features: Sequence[str] = (),
+        library_type: str = "staticlib",
+    ) -> None:
+        """Install a locked Rust crate with cargo-c into the dependency prefix."""
+        env = self.dependency_environment()
+        with tempfile.TemporaryDirectory(prefix="muxtools-cargo-") as temporary:
+            cargo_home = Path(temporary)
+            env["CARGO_HOME"] = str(cargo_home)
+            env["CARGO_TARGET_DIR"] = str(cargo_home / "target")
+            vendor = cargo_home / "vendor"
+            config = run(["cargo", "vendor", "--locked", "--versioned-dirs", vendor], cwd=crate, env=env, capture=True)
+            (cargo_home / "config.toml").write_text(
+                config.stdout.replace('directory = "vendor"', f'directory = "{vendor}"')
+            )
+            args = [
+                "cargo",
+                "cinstall",
+                "--release",
+                "--locked",
+                f"--library-type={library_type}",
+                f"--prefix={self.prefix}",
+                f"--libdir={self.prefix / 'lib'}",
+            ]
+            if features:
+                args.append(f"--features={','.join(features)}")
+            if self.windows:
+                rust_target = WINDOWS_RUST_TARGETS[self.target]
+                key = rust_target.upper().replace("-", "_")
+                env[f"CARGO_TARGET_{key}_LINKER"] = self.toolchain.cc
+                args.append(f"--target={rust_target}")
+            run(args, cwd=crate, env=env)
 
     def stage_binaries(self) -> None:
         for executable in self.package.executables:

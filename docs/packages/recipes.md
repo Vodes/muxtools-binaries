@@ -23,6 +23,7 @@ Use `BuildContext` from `muxtools_binaries.build`. It supplies these attributes:
 | `jobs` | Parallel build limit. |
 | `tier` | Current CPU level. Starts as `baseline`; set it before each variant build. |
 | `prefix` | Private dependency prefix for the current CPU level. |
+| `shared_prefix` | Optional prefix reused across CPU levels for dependencies built once. |
 | `cache` | Shared verified download cache under `build/downloads`. |
 
 The main helpers are:
@@ -31,8 +32,10 @@ The main helpers are:
 | --- | --- |
 | `source(name, pin)` | Fetch a verified Git or archive source and collect its notices. Returns the source directory. |
 | `build_environment()` | Return compiler, linker, CPU, LTO, and private dependency settings for the current target and tier. |
+| `dependency_environment()` | Add the private prefix to CMake, pkg-config, and `PATH` settings. |
 | `host_environment()` | Return native builder settings for host tools needed during a cross build. |
 | `autotools(name, source, options=(), flags_in_compiler=True)` | Configure, build, and install into the private prefix. Disable compiler-embedded flags for projects that require ordinary `CFLAGS` and `CXXFLAGS`. |
+| `cargo_cinstall(crate, features=(), library_type="staticlib")` | Vendor locked Rust dependencies, then install a cargo-c library into the private prefix. |
 | `cmake(name, source, definitions, install=False)` | Configure with Ninja and build. Optionally install into the private prefix. Returns the build directory. |
 | `asset()` | Download the current target asset and verify SHA-256. Returns the cached file path. |
 | `stage_binary(source, executable)` | Copy a file to the standard name for that logical executable and current tier; set executable mode. |
