@@ -19,6 +19,14 @@ def build_hdr_dependencies(ctx: BuildContext) -> None:
 
 
 def build_ffms2_dependencies(ctx: BuildContext) -> None:
+    if ctx.target_info.os == "linux":
+        gcc = ctx.toolchain.compatibility_cc or ctx.toolchain.cc
+        libatomic = Path(run([gcc, "-print-file-name=libatomic.a"], capture=True).stdout.strip())
+        if not libatomic.is_absolute() or not libatomic.is_file():
+            raise FileNotFoundError(f"GCC static libatomic archive is missing: {libatomic}")
+        (ctx.prefix / "lib").mkdir(parents=True, exist_ok=True)
+        shutil.copy2(libatomic, ctx.prefix / "lib/libatomic.a")
+
     zlib = ctx.source("zlib", ctx.package.dependencies["zlib"])
     env = ctx.dependency_environment()
     run([zlib / "configure", f"--prefix={ctx.prefix}", "--static"], cwd=zlib, env=env)

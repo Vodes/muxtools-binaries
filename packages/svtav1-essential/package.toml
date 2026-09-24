@@ -42,7 +42,7 @@ cpu_levels = ["baseline", "avx2", "avx512", "zn4"]
 extra_ldflags = ["-shared-libgcc", "-Wl,--strip-debug"]
 
 [targets.linux-x86_64.runtime]
-requirements = ["libgcc_s.so.1", "libatomic.so.1"]
+requirements = ["libgcc_s.so.1"]
 
 [targets.linux-arm64]
 toolchain = "clang"
@@ -50,7 +50,7 @@ lto = "thin"
 extra_ldflags = ["-shared-libgcc", "-Wl,--strip-debug"]
 
 [targets.linux-arm64.runtime]
-requirements = ["libgcc_s.so.1", "libatomic.so.1"]
+requirements = ["libgcc_s.so.1"]
 
 [targets.windows-x86_64]
 toolchain = "clang"
