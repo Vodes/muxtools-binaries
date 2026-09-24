@@ -269,6 +269,10 @@ def run_smoke(command: Command, check: CommandCheck, *, cwd: Path | None = None)
     except subprocess.CalledProcessError as error:
         code, stdout = error.returncode, error.stdout or ""
         if code not in check.exit_codes:
+            for name, output in (("stdout", error.stdout), ("stderr", error.stderr)):
+                if output:
+                    print(f"Captured {name}:", file=sys.stderr)
+                    print(output, file=sys.stderr, end="" if output.endswith("\n") else "\n")
             raise
     if code not in check.exit_codes:
         raise ValueError(f"Unexpected exit code {code}: {command}")
