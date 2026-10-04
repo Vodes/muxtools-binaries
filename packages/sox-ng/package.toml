@@ -2,8 +2,8 @@ schema_version = 1
 name = "sox-ng"
 # Upstream description: https://codeberg.org/sox_ng/sox_ng
 description = "SoX_ng audio conversion and inspection tools, packaged as sox and soxi."
-version = "14.8.1.post1"
-version_code = 2
+version = "14.8.1.r3"
+version_code = 3
 type = "source-build"
 
 [source]
@@ -43,8 +43,8 @@ commit = "0657aee69dec8508a0011f47f3b69d7538e9d262"
 
 [dependencies.png]
 repository = "https://github.com/pnggroup/libpng.git"
-tag = "v1.6.58"
-commit = "3061454d980de7d53608f594194cfac722721d2a"
+tag = "v1.6.59"
+commit = "cd952f49f95bb27154ae77dbb103032d95f6e580"
 
 [dependencies.id3tag]
 repository = "https://codeberg.org/tenacityteam/libid3tag.git"
