@@ -2,8 +2,8 @@ schema_version = 1
 name = "fdkaac"
 # Upstream description: https://github.com/nu774/fdkaac
 description = "command line encoder frontend for libfdk-aac"
-version = "1.0.9-libfdk-2.0.3+1"
-version_code = 3
+version = "1.0.9-libfdk-3.0.0"
+version_code = 4
 type = "source-build"
 
 [source]
@@ -13,8 +13,8 @@ commit = "1b311f7cda11ddabc11bb0e6230506796a6018c5"
 
 [dependencies.fdk]
 repository = "https://github.com/mstorsjo/fdk-aac.git"
-tag = "v2.0.3"
-commit = "716f4394641d53f0d79c9ddac3fa93b03a49f278"
+tag = "v3.0.0"
+commit = "a68a51aa45d86a43c7b228e3d45624af09dcdd8d"
 
 [targets.linux-x86_64]
 toolchain = "gcc"
