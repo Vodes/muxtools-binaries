@@ -1,0 +1,40 @@
+schema_version = 1
+name = "dovi-tool"
+description = "CLI tool combining multiple utilities for working with Dolby Vision"
+version = "2.3.4"
+version_code = 1
+type = "source-build"
+
+[source]
+repository = "https://github.com/quietvoid/dovi_tool.git"
+tag = "2.3.4"
+commit = "614c816b6446dcd1dbaf433403d499a6026fbb5a"
+
+[targets.linux-x86_64]
+toolchain = "clang"
+lto = "thin"
+
+[targets.linux-x86_64.runtime]
+requirements = ["libgcc_s.so.1"]
+
+[targets.linux-arm64]
+toolchain = "clang"
+lto = "thin"
+
+[targets.linux-arm64.runtime]
+requirements = ["libgcc_s.so.1"]
+
+[targets.windows-x86_64]
+toolchain = "clang"
+lto = "thin"
+
+[targets.windows-arm64]
+toolchain = "clang"
+lto = "thin"
+
+[targets.macos-arm64]
+toolchain = "clang"
+lto = "thin"
+
+[executables]
+dovi_tool = ["--version"]

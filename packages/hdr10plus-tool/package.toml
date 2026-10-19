@@ -1,0 +1,40 @@
+schema_version = 1
+name = "hdr10plus-tool"
+description = "Parses HDR10+ dynamic metadata in HEVC video files"
+version = "1.7.2"
+version_code = 1
+type = "source-build"
+
+[source]
+repository = "https://github.com/quietvoid/hdr10plus_tool.git"
+tag = "1.7.2"
+commit = "faa437e52b317d08f5d0df43278640623d318479"
+
+[targets.linux-x86_64]
+toolchain = "clang"
+lto = "thin"
+
+[targets.linux-x86_64.runtime]
+requirements = ["libgcc_s.so.1"]
+
+[targets.linux-arm64]
+toolchain = "clang"
+lto = "thin"
+
+[targets.linux-arm64.runtime]
+requirements = ["libgcc_s.so.1"]
+
+[targets.windows-x86_64]
+toolchain = "clang"
+lto = "thin"
+
+[targets.windows-arm64]
+toolchain = "clang"
+lto = "thin"
+
+[targets.macos-arm64]
+toolchain = "clang"
+lto = "thin"
+
+[executables]
+hdr10plus_tool = ["--version"]
