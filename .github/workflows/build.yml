@@ -28,12 +28,7 @@ jobs:
           fetch-depth: 0
           submodules: true
       - uses: astral-sh/setup-uv@v10.0.1
-      - run: uv run --frozen muxtools-build validate
-      - run: uv run --frozen ruff check src tests builder packages
-      - run: uv run --frozen tombi format --check
-      - run: uv run --frozen tombi lint --error-on-warnings
-      - run: uv run --frozen pyrefly check
-      - run: uv run --frozen pytest -q
+      - run: uv run --frozen just check
       - id: matrix
         env:
           PACKAGES: ${{ inputs.packages }}

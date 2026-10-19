@@ -173,9 +173,7 @@ def test_windows_arm64_build_uses_qt_clang_spec(tmp_path, monkeypatch):
 
     recipe.build(ctx)
 
-    qt_configures = [
-        entry for entry in calls if isinstance(entry[0], list) and "-qt-host-path" in entry[0]
-    ]
+    qt_configures = [entry for entry in calls if isinstance(entry[0], list) and "-qt-host-path" in entry[0]]
     assert len(qt_configures) == 1
     xplatform = qt_configures[0][0].index("-xplatform")
     assert qt_configures[0][0][xplatform + 1] == "win32-clang-g++"

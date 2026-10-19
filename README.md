@@ -23,10 +23,11 @@ Install uv and Docker, then run:
 ```sh
 git submodule update --init --recursive
 uv sync --frozen
-uv run muxtools-build validate
-uv run pytest -q
+uv run just
 ```
 
+`uv run just` runs validation, linting, type checking, and tests. Use
+`uv run just --list` to see individual commands.
 See the [build guide](docs/getting-started.md) for build commands and checks.
 Releases require a manual workflow run; normal CI only builds and tests packages.
 

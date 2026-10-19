@@ -86,17 +86,26 @@ for imported tools and [Checks and tests](architecture/testing.md) for test beha
 ## Run the development checks
 
 ```sh
-uv run muxtools-build validate
-uv run ruff check src tests builder packages
-uv run pytest -q
-uv run pyrefly check
-uv run tombi format --check
-uv run tombi lint --error-on-warnings
+uv run just
 ```
 
-Use `uv run tombi format` to format TOML files. Package-specific tests in
-`packages/<name>/tests/` run with the normal pytest command.
-`pyrefly check` type-checks the shared code, tests, builder scripts, and all package recipes together.
+The default recipe, `check`, runs manifest and recipe validation, Python and TOML
+formatting and lint checks, pyrefly, and pytest. CI runs the same recipe.
+The `lint` recipe includes package validation and all formatting, linting, and type checks.
+Pyrefly checks the shared code, tests, builder scripts, and all package recipes together.
+
+Run individual checks or apply formatting with:
+
+```sh
+uv run just lint
+uv run just test
+uv run just test -k test_archive_roundtrip
+uv run just format
+```
+
+The test recipe includes package-specific tests in `packages/<name>/tests/` and
+forwards extra arguments to pytest. The format recipe formats Python and TOML
+files and applies automatic Ruff fixes. Use `uv run just --list` to list recipes.
 
 Build files go in `build/`; archives and checksums go in `dist/`. Both are gitignored.
 Use `uv run muxtools-build --help` for other commands, or see
