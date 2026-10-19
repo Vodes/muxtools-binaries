@@ -70,7 +70,8 @@ uv run muxtools-build build PACKAGE --target macos-arm64
 uv run muxtools-build test dist/PACKAGE-VERSION-macos-arm64.tar.zst
 ```
 
-For the SVT-AV1 packages, also install `cargo-c` with Homebrew and use Rust 1.95.0.
+The SVT-AV1, dovi-tool, and hdr10plus-tool packages require Rust 1.95.0.
+For the SVT-AV1 packages, also install `cargo-c` with Homebrew.
 Build dates use the current time by default. Set `SOURCE_DATE_EPOCH` to a Unix
 timestamp to use a specific date and time in a rebuild.
 

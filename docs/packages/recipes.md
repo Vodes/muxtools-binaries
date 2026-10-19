@@ -36,6 +36,7 @@ The main helpers are:
 | `host_environment()` | Return native builder settings for host tools needed during a cross build. |
 | `autotools(name, source, options=(), flags_in_compiler=True)` | Configure, build, and install into the private prefix. Disable compiler-embedded flags for projects that require ordinary `CFLAGS` and `CXXFLAGS`. |
 | `cargo_cinstall(crate, features=(), library_type="staticlib")` | Vendor locked Rust dependencies, then install a cargo-c library into the private prefix. |
+| `cargo_install(crate, features=(), default_features=True)` | Vendor locked Rust dependencies, then install release CLI binaries offline into the private prefix. Applies the target CPU level and Rust LTO settings. |
 | `cmake(name, source, definitions, install=False)` | Configure with Ninja and build. Optionally install into the private prefix. Returns the build directory. |
 | `asset()` | Download the current target asset and verify SHA-256. Returns the cached file path. |
 | `stage_binary(source, executable)` | Copy a file to the standard name for that logical executable and current tier; set executable mode. |

@@ -6,7 +6,8 @@ import shutil
 import tempfile
 import time
 import tomllib
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from pathlib import Path
 
 from pydantic import Field
@@ -26,6 +27,12 @@ class AutotoolsOptions(Model):
 WINDOWS_RUST_TARGETS = {
     "windows-x86_64": "x86_64-pc-windows-gnu",
     "windows-arm64": "aarch64-pc-windows-gnullvm",
+}
+RUST_TARGETS = {
+    **WINDOWS_RUST_TARGETS,
+    "linux-x86_64": "x86_64-unknown-linux-gnu",
+    "linux-arm64": "aarch64-unknown-linux-gnu",
+    "macos-arm64": "aarch64-apple-darwin",
 }
 
 
@@ -256,14 +263,10 @@ class BuildContext:
         run(["make", f"-j{self.jobs}"], cwd=build, env=env)
         run(["make", "install"], cwd=build, env=env)
 
-    def cargo_cinstall(
-        self,
-        crate: Path,
-        *,
-        features: Sequence[str] = (),
-        library_type: str = "staticlib",
-    ) -> None:
-        """Install a locked Rust crate with cargo-c into the dependency prefix."""
+    @contextmanager
+    def _cargo_environment(
+        self, crate: Path, *, explicit_target: bool = False
+    ) -> Iterator[tuple[dict[str, str], list[str]]]:
         env = self.dependency_environment()
         with tempfile.TemporaryDirectory(prefix="muxtools-cargo-") as temporary:
             cargo_home = Path(temporary)
@@ -274,6 +277,23 @@ class BuildContext:
             (cargo_home / "config.toml").write_text(
                 config.stdout.replace('directory = "vendor"', f'directory = "{vendor}"')
             )
+            target_args = []
+            if self.windows or explicit_target:
+                rust_target = RUST_TARGETS[self.target]
+                key = rust_target.upper().replace("-", "_")
+                env[f"CARGO_TARGET_{key}_LINKER"] = self.toolchain.cc
+                target_args.append(f"--target={rust_target}")
+            yield env, target_args
+
+    def cargo_cinstall(
+        self,
+        crate: Path,
+        *,
+        features: Sequence[str] = (),
+        library_type: str = "staticlib",
+    ) -> None:
+        """Install a locked Rust crate with cargo-c into the dependency prefix."""
+        with self._cargo_environment(crate) as (env, target_args):
             args = [
                 "cargo",
                 "cinstall",
@@ -285,11 +305,50 @@ class BuildContext:
             ]
             if features:
                 args.append(f"--features={','.join(features)}")
-            if self.windows:
-                rust_target = WINDOWS_RUST_TARGETS[self.target]
-                key = rust_target.upper().replace("-", "_")
-                env[f"CARGO_TARGET_{key}_LINKER"] = self.toolchain.cc
-                args.append(f"--target={rust_target}")
+            run([*args, *target_args], cwd=crate, env=env)
+
+    def cargo_install(self, crate: Path, *, features: Sequence[str] = (), default_features: bool = True) -> None:
+        """Install locked Rust CLI binaries into the private prefix."""
+        with self._cargo_environment(crate, explicit_target=True) as (env, target_args):
+            flags = []
+            for flag in self.target_info.cpu_flags[self.tier]:
+                if flag.startswith("-march="):
+                    cpu = flag.removeprefix("-march=")
+                    flags.append(f"-Ctarget-cpu={'generic' if cpu == 'armv8-a' else cpu}")
+                elif flag.startswith("-mno-"):
+                    flags.append(f"-Ctarget-feature=-{flag.removeprefix('-mno-')}")
+            if RUST_TARGETS[self.target].endswith("-gnullvm"):
+                flags.append("-Ctarget-feature=+crt-static")
+            if self.target == "windows-x86_64" and self.toolchain.abi == "mingw-ucrt":
+                # Rust's GNU target explicitly links GCC's static builtins and unwinder even with Clang.
+                gcc = toolchain_spec(self.target, "gcc").cc
+                gcc_directory = Path(run([gcc, "-print-libgcc-file-name"], capture=True).stdout.strip()).parent
+                flags.append(f"-Lnative={gcc_directory}")
+            env.pop("RUSTFLAGS", None)
+            env["CARGO_ENCODED_RUSTFLAGS"] = "\x1f".join(flags)
+            env["CARGO_PROFILE_RELEASE_LTO"] = (
+                "fat" if self.config.lto == "full" else "thin" if self.config.lto == "thin" else "false"
+            )
+            env["CARGO_PROFILE_RELEASE_STRIP"] = "symbols"
+            args: list[str | Path | int] = [
+                "cargo",
+                "install",
+                "--path",
+                crate,
+                "--root",
+                self.prefix,
+                "--locked",
+                "--offline",
+                "--no-track",
+                "--bins",
+                "--jobs",
+                self.jobs,
+                *target_args,
+            ]
+            if features:
+                args.append(f"--features={','.join(features)}")
+            if not default_features:
+                args.append("--no-default-features")
             run(args, cwd=crate, env=env)
 
     def stage_binaries(self) -> None:

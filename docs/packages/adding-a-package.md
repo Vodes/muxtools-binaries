@@ -20,6 +20,7 @@ and its declared targets automatically.
 | --- | --- | --- |
 | Compile an Autotools project | `source-build` | `packages/flac/` |
 | Compile a CMake project | `source-build` | `packages/wavpack/` or `packages/x265/` |
+| Compile a Rust CLI | `source-build` | `packages/dovi-tool/` |
 | Compile with custom steps | `source-build` | `packages/x265/` or `packages/mkvtoolnix/` |
 | Import a third-party build | `external-build` | `packages/ffmpeg/` |
 | Import an upstream release | `upstream-binary` | `packages/x264/` |
