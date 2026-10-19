@@ -133,7 +133,8 @@ def main() -> None:
                             ]
                         )
                 if target_info.os == "windows" and toolchain_name == "clang-msvc":
-                    ctx.tier = "baseline"
+                    package = package_for(target, toolchain_name, "thin")
+                    ctx = BuildContext(root, package, target, work, work, 1)
                     qualify_cmake(ctx, cmake_source, target_output)
     for target in targets:
         target_info = TARGETS[target]

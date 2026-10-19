@@ -1,9 +1,10 @@
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any
 
 from muxtools_binaries.build import BuildContext
-from muxtools_binaries.models import load_packages
+from muxtools_binaries.models import GitSource, load_packages
 from muxtools_binaries.recipes import load_recipe
 from muxtools_binaries.updates import UpdateContext
 
@@ -29,7 +30,7 @@ def _mock_build(ctx, monkeypatch, tmp_path):
     qt_header = sources["qtbase"] / "src/corelib/thread/qyieldcpu.h"
     qt_header.parent.mkdir(parents=True)
     qt_header.write_text("#include <QtCore/qtconfigmacros.h>\n")
-    calls = []
+    calls: list[tuple[Any, ...]] = []
 
     monkeypatch.setattr(ctx, "source", lambda name, pin: sources[name])
     monkeypatch.setattr(
@@ -92,7 +93,7 @@ def _mock_build(ctx, monkeypatch, tmp_path):
 def test_manifest_is_source_build_with_pinned_minimal_dependencies():
     package = load_packages(ROOT, ["mkvtoolnix"])["mkvtoolnix"]
     assert package.type == "source-build"
-    assert package.source is not None and package.source.recursive
+    assert isinstance(package.source, GitSource) and package.source.recursive
     assert package.source.tag == "release-102.0"
     assert package.version_code == 3
     assert package.targets["linux-x86_64"].asset is None

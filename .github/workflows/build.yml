@@ -32,7 +32,7 @@ jobs:
       - run: uv run --frozen ruff check src tests builder packages
       - run: uv run --frozen tombi format --check
       - run: uv run --frozen tombi lint --error-on-warnings
-      - run: uv run --frozen mypy
+      - run: uv run --frozen pyrefly check
       - run: uv run --frozen pytest -q
       - id: matrix
         env:

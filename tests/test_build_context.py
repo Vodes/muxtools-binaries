@@ -1,8 +1,8 @@
 import shlex
 import subprocess
 import tarfile
+from argparse import Namespace
 from pathlib import Path
-from types import SimpleNamespace
 
 from muxtools_binaries.build import BuildContext
 from muxtools_binaries.cli import _build_in_container
@@ -134,7 +134,7 @@ def test_container_build_forwards_source_date_epoch(tmp_path, monkeypatch):
     calls = []
     monkeypatch.setattr("muxtools_binaries.cli.run", lambda args: calls.append(args))
     monkeypatch.setenv("SOURCE_DATE_EPOCH", "946684800")
-    args = SimpleNamespace(target="linux-x86_64", package="example", channel="test", jobs=1)
+    args = Namespace(target="linux-x86_64", package="example", channel="test", jobs=1)
 
     _build_in_container(tmp_path, args, "builder:test", "revision")
 

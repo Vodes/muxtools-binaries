@@ -23,7 +23,7 @@ muxtools-build = "muxtools_binaries.cli:main"
 
 [dependency-groups]
 dev = [
-    "mypy>=2.3.1",
+    "pyrefly>=1.3.2",
     "pytest>=9.1.1,<10",
     "ruff>=0.16.8",
 ]
@@ -35,14 +35,10 @@ docs = [
 requires = ["uv_build>=0.8.24,<0.9"]
 build-backend = "uv_build"
 
-[tool.mypy]
-local_partial_types = true
-allow_redefinition_new = true
-files = ["src", "tests", "builder", "packages"]
-explicit_package_bases = true
-mypy_path = ["$MYPY_CONFIG_FILE_DIR/src", "$MYPY_CONFIG_FILE_DIR/stubs"]
-# Hyphenated package directories give every recipe the same module name.
-exclude = ["^packages/[^/]+/recipe\\.py$"]
+[tool.pyrefly]
+preset = "default"
+project-includes = ["src/**/*.py", "tests/**/*.py", "builder/**/*.py", "packages/**/*.py"]
+search-path = ["src", "stubs"]
 
 [tool.pytest.ini_options]
 addopts = "--import-mode=importlib"

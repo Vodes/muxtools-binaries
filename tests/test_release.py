@@ -216,6 +216,7 @@ def test_published_version_recovers_catalog_using_original_archives(releases, pa
     api.request.return_value = assets
     api.asset_bytes.side_effect = lambda asset: contents[asset["id"]]
     entry = _publish_package(api, "example/repo", package.name, groups[package.name])
+    assert entry is not None
     assert entry["version_code"] == package.version_code
     assert entry.get("description", "") == package.description
     assert entry["targets"] == original

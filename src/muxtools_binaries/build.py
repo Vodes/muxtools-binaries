@@ -6,7 +6,7 @@ import shutil
 import tempfile
 import time
 import tomllib
-from collections.abc import Iterator, Sequence
+from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -266,7 +266,7 @@ class BuildContext:
     @contextmanager
     def _cargo_environment(
         self, crate: Path, *, explicit_target: bool = False
-    ) -> Iterator[tuple[dict[str, str], list[str]]]:
+    ) -> Generator[tuple[dict[str, str], list[str]], None, None]:
         env = self.dependency_environment()
         with tempfile.TemporaryDirectory(prefix="muxtools-cargo-") as temporary:
             cargo_home = Path(temporary)

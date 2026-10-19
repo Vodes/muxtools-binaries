@@ -185,7 +185,6 @@ def main() -> int:
                 recipe = load_recipe(root, package.name)
                 for target in package.targets:
                     recipe_checks(recipe, package, target)
-                run([sys.executable, "-m", "mypy", root / "packages" / package.name / "recipe.py"], cwd=root)
             print(f"Validated {len(packages)} packages")
         elif args.command == "package":
             data = read_metadata(args.stage)

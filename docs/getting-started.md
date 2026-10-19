@@ -89,13 +89,14 @@ for imported tools and [Checks and tests](architecture/testing.md) for test beha
 uv run muxtools-build validate
 uv run ruff check src tests builder packages
 uv run pytest -q
-uv run mypy
+uv run pyrefly check
 uv run tombi format --check
 uv run tombi lint --error-on-warnings
 ```
 
 Use `uv run tombi format` to format TOML files. Package-specific tests in
 `packages/<name>/tests/` run with the normal pytest command.
+`pyrefly check` type-checks the shared code, tests, builder scripts, and all package recipes together.
 
 Build files go in `build/`; archives and checksums go in `dist/`. Both are gitignored.
 Use `uv run muxtools-build --help` for other commands, or see
