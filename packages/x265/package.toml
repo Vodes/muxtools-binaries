@@ -2,8 +2,8 @@ schema_version = 1
 name = "x265"
 # Upstream description: https://www.x265.org/
 description = "HEVC/H.265 Encoder"
-version = "4.3"
-version_code = 4
+version = "4.3.post1"
+version_code = 5
 type = "source-build"
 
 [build]
@@ -15,6 +15,7 @@ CMAKE_POLICY_VERSION_MINIMUM = "3.5"
 ENABLE_SHARED = false
 ENABLE_ASSEMBLY = true
 ENABLE_LIBNUMA = false
+ENABLE_HDR10_PLUS = true
 
 [source]
 repository = "https://github.com/Multicorewareinc/x265.git"

@@ -26,7 +26,7 @@ dev = [
     "pyrefly>=1.3.2",
     "pytest>=9.1.1,<10",
     "ruff>=0.16.8",
-    "rust-just>=1.58.0",
+    "rust-just>=1.58.0; sys_platform != 'win32' or platform_machine != 'ARM64'",
 ]
 docs = [
     "zensical>=0.0.63,<0.1",
