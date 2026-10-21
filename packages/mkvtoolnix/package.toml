@@ -2,14 +2,14 @@ schema_version = 1
 name = "mkvtoolnix"
 # Upstream description: https://mkvtoolnix.download/
 description = "Matroska tools for Linux/Unix and Windows"
-version = "102.0"
-version_code = 3
+version = "103.0"
+version_code = 4
 type = "source-build"
 
 [source]
 repository = "https://codeberg.org/mbunkus/mkvtoolnix.git"
-tag = "release-102.0"
-commit = "e85150f7e615f9f735f2187d48e808dc56adfe01"
+tag = "release-103.0"
+commit = "6e16746073fb4338b94d154e28dfa288df5d8a6a"
 recursive = true
 
 [dependencies.zlib]
