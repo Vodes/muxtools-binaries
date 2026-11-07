@@ -96,7 +96,7 @@ def build_ffms2_dependencies(ctx: BuildContext) -> None:
         raise ValueError("FFMS2 static installation is missing")
 
 
-def build_encoder(ctx: BuildContext, *, essential: bool = False) -> None:
+def build_encoder(ctx: BuildContext, *, essential: bool = False, ffms2: bool = False) -> None:
     if ctx.package.source is None:
         raise ValueError("SVT-AV1 requires a pinned source")
     for tier in ctx.config.cpu_levels:
@@ -140,8 +140,10 @@ def build_encoder(ctx: BuildContext, *, essential: bool = False) -> None:
             definitions["CMAKE_SIZEOF_VOID_P"] = 8
             if ctx.target_info.arch == "x86_64":
                 definitions["CMAKE_ASM_NASM_OBJECT_FORMAT"] = "win64"
+        if essential or ffms2:
+            definitions["USE_FFMS2"] = True
         if essential:
-            definitions.update(USE_FFMS2=True, USE_WEBM_IO=True)
+            definitions["USE_WEBM_IO"] = True
         result = ctx.cmake(ctx.package.name, source, definitions, install=True)
         binary = ctx.prefix / "bin" / ("SvtAv1EncApp" + ctx.target_info.executable_suffix)
         if not binary.is_file():
@@ -166,6 +168,19 @@ def checks(package: Package, target: str) -> CheckSuite:
             "faster",
             "--webm",
             "0",
+        ]
+    elif package.name == "svtav1-tritium":
+        args += [
+            "--fps-num",
+            "24",
+            "--fps-denom",
+            "1",
+            "--input-depth",
+            "{bit_depth}",
+            "--frames",
+            "1",
+            "--preset",
+            "11",
         ]
     else:
         args += ["--fps", "24", "--input-depth", "{bit_depth}", "-n", "1", "--preset", "11"]
