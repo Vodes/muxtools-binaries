@@ -13,7 +13,7 @@ BUILD_TAG = re.compile(r"pgo-build-(\d{4}-\d{2}-\d{2})-([0-9a-f]{7,40})")
 def build(ctx: BuildContext) -> None:
     build_hdr_dependencies(ctx)
     build_ffms2_dependencies(ctx)
-    build_encoder(ctx, ffms2=True)
+    build_encoder(ctx, ffms2=True, version_tag=ctx.package.version)
 
 
 def discover_update(ctx: UpdateContext) -> dict[str, Any]:

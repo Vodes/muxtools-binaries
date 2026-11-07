@@ -6,7 +6,7 @@ from pathlib import Path
 from .build import BuildContext
 from .checks import CheckSuite, VideoCheck, default_checks
 from .io import run
-from .models import Package
+from .models import GitSource, Package
 
 
 def build_hdr_dependencies(ctx: BuildContext) -> None:
@@ -96,12 +96,21 @@ def build_ffms2_dependencies(ctx: BuildContext) -> None:
         raise ValueError("FFMS2 static installation is missing")
 
 
-def build_encoder(ctx: BuildContext, *, essential: bool = False, ffms2: bool = False) -> None:
+def build_encoder(
+    ctx: BuildContext, *, essential: bool = False, ffms2: bool = False, version_tag: str | None = None
+) -> None:
     if ctx.package.source is None:
         raise ValueError("SVT-AV1 requires a pinned source")
+    source_pin = ctx.package.source
+    if version_tag is not None:
+        if not isinstance(source_pin, GitSource):
+            raise ValueError("SVT-AV1 version tags require a Git source")
+        # The encoder takes its display version from a tag on HEAD. Keep the
+        # upstream source pin intact and label only the private build checkout.
+        source_pin = source_pin.model_copy(update={"tag": version_tag})
     for tier in ctx.config.cpu_levels:
         ctx.tier = tier
-        source = ctx.source(ctx.package.name, ctx.package.source)
+        source = ctx.source(ctx.package.name, source_pin)
         app_cmake = source / "Source/App/CMakeLists.txt"
         app_text = app_cmake.read_text()
         if "${BASE}${SUFFIX}" not in app_text:

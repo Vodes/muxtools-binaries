@@ -6,7 +6,7 @@ import pytest
 
 from muxtools_binaries.checks import VideoCheck
 from muxtools_binaries.cli import _matrix
-from muxtools_binaries.models import load_packages
+from muxtools_binaries.models import GitSource, load_packages
 from muxtools_binaries.recipes import load_recipe
 from muxtools_binaries.svtav1 import build_encoder, checks
 from muxtools_binaries.updates import UpdateContext, update_definition
@@ -122,6 +122,7 @@ def test_shared_encoder_configuration(tmp_path, fork, windows):
         (bundled / "LICENSE.TXT").write_text("WebM license")
     ctx = MagicMock()
     ctx.package.name = f"svtav1-{fork}"
+    ctx.package.source = GitSource(repository="https://example.test/svt", tag="upstream-tag", commit="0" * 40)
     ctx.config.cpu_levels = ["baseline"]
     ctx.source.return_value = source
     ctx.stage = tmp_path / "stage"
@@ -130,7 +131,12 @@ def test_shared_encoder_configuration(tmp_path, fork, windows):
     ctx.target_info.arch = "x86_64"
     ctx.target_info.executable_suffix = ".exe" if windows else ""
     ctx.cmake.return_value = tmp_path / "result"
-    build_encoder(ctx, essential=fork == "essential", ffms2=fork == "tritium")
+    version_tag = "2026-11-07-25c3e38" if fork == "tritium" else None
+    build_encoder(ctx, essential=fork == "essential", ffms2=fork == "tritium", version_tag=version_tag)
+    build_pin = ctx.source.call_args.args[1]
+    assert build_pin.tag == (version_tag or "upstream-tag")
+    assert build_pin.commit == ctx.package.source.commit
+    assert ctx.package.source.tag == "upstream-tag"
     definitions = ctx.cmake.call_args.args[2]
     assert definitions.get("USE_FFMS2", False) == (fork != "5fish")
     assert definitions.get("USE_WEBM_IO", False) == (fork == "essential")
