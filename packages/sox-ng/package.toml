@@ -2,8 +2,8 @@ schema_version = 1
 name = "sox-ng"
 # Upstream description: https://codeberg.org/sox_ng/sox_ng
 description = "SoX_ng audio conversion and inspection tools, packaged as sox and soxi."
-version = "14.8.1.r3"
-version_code = 3
+version = "14.8.1.r4"
+version_code = 4
 type = "source-build"
 
 [source]
@@ -13,8 +13,8 @@ commit = "a4a14b4f58ac2c08c4cc416a7cffe8a4c50a0b7d"
 
 [dependencies.zlib]
 repository = "https://github.com/madler/zlib.git"
-tag = "v1.3.2"
-commit = "da607da739fa6047df13e66a2af6b8bec7c2a498"
+tag = "v1.4"
+commit = "99623ef7097352da7993ba614161fd6a311e046e"
 
 [dependencies.ogg]
 repository = "https://github.com/xiph/ogg.git"
