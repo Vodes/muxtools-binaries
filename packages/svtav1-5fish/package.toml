@@ -1,14 +1,14 @@
 schema_version = 1
 name = "svtav1-5fish"
 description = "5fish SVT-AV1 encoder"
-version = "2.3.261114"
-version_code = 5
+version = "2.3.261118"
+version_code = 6
 type = "source-build"
 
 [source]
 repository = "https://github.com/5fish/SVT-AV1.git"
-tag = "v2.3.261114"
-commit = "53440ccb456a31be012d6802c41e4b7ac7ac7176"
+tag = "v2.3.261118"
+commit = "573452c4910220a2f33e8afa2590ccb4e56880ce"
 
 [dependencies.dovi]
 repository = "https://github.com/quietvoid/dovi_tool.git"
