@@ -1,14 +1,14 @@
 schema_version = 1
 name = "svtav1-essential"
 description = "SVT-AV1 Essential encoder with FFMS2 input and WebM output"
-version = "4.0.1"
-version_code = 1
+version = "4.3.1"
+version_code = 2
 type = "source-build"
 
 [source]
 repository = "https://github.com/nekotrix/SVT-AV1-Essential.git"
-tag = "v4.0.1-Essential"
-commit = "7b064486c2f3996e9371593bb6c4ab6e1ba41b9f"
+tag = "v4.3.1-Essential"
+commit = "9f7ebdc5ffbe3c135b223dd618d5155b43427703"
 
 [dependencies.dovi]
 repository = "https://github.com/quietvoid/dovi_tool.git"
