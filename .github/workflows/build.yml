@@ -19,41 +19,32 @@ permissions:
 jobs:
   prepare:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       has_packages: ${{ steps.matrix.outputs.has_packages }}
+      has_releases: ${{ steps.matrix.outputs.has_releases }}
+      validation_fingerprint: ${{ steps.matrix.outputs.validation_fingerprint }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
           fetch-depth: 0
-          submodules: true
       - uses: astral-sh/setup-uv@v10.0.1
-      - run: uv run --frozen just check
-      - id: matrix
+      - name: Select builds and check prior validation
+        id: matrix
         env:
+          GH_TOKEN: ${{ github.event_name == 'push' && github.token || '' }}
           PACKAGES: ${{ inputs.packages }}
-          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event_name == 'push' && github.event.before || '' }}
-          EVENT: ${{ github.event_name }}
-        shell: bash
+          PUBLISH: ${{ inputs.publish }}
+        run: uv run --frozen python -m muxtools_binaries.workflow
+      - name: Check repository
+        if: steps.matrix.outputs.run_checks == 'true'
         run: |
-          args=()
-          if [ "$EVENT" = push ]; then
-            if [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
-              args+=(--changed-from "$BASE")
-            else
-              args+=(--changed-from HEAD)
-            fi
-          elif [ -n "$BASE" ]; then
-            if ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
-              echo '::error::The pull request base commit is unavailable after checkout.'
-              exit 1
-            fi
-            args+=(--changed-from "$BASE")
-          fi
-          result=$(uv run --frozen muxtools-build matrix --packages "$PACKAGES" "${args[@]}")
-          echo "matrix=$result" >> "$GITHUB_OUTPUT"
-          has_packages=$(uv run --frozen python -c 'import json, sys; print(str(bool(json.load(sys.stdin)["include"])).lower())' <<<"$result")
-          echo "has_packages=$has_packages" >> "$GITHUB_OUTPUT"
+          git submodule update --init
+          uv run --frozen just check
 
   build:
     needs: prepare
@@ -118,20 +109,21 @@ jobs:
           PACKAGE: ${{ matrix.package }}
           TARGET: ${{ matrix.target }}
           IMAGE: ${{ steps.builder.outputs.image }}
-          CHANNEL: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish && 'release' || 'test' }}
+          CHANNEL: ${{ matrix.channel }}
         run: uv run --frozen muxtools-build build "$PACKAGE" --target "$TARGET" --image "$IMAGE" --channel "$CHANNEL"
       - name: Build package natively
         if: matrix.builder_kind == 'native'
         env:
           PACKAGE: ${{ matrix.package }}
           TARGET: ${{ matrix.target }}
-          CHANNEL: ${{ github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish && 'release' || 'test' }}
+          CHANNEL: ${{ matrix.channel }}
         run: uv run --frozen muxtools-build build "$PACKAGE" --target "$TARGET" --channel "$CHANNEL"
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: package-${{ matrix.package }}-${{ matrix.target }}
+          name: ${{ matrix.channel == 'release' && 'release-' || '' }}package-${{ matrix.package }}-${{ matrix.target }}
           path: dist/*
           if-no-files-found: error
+          overwrite: true
 
   smoke:
     needs: [prepare, build]
@@ -150,7 +142,7 @@ jobs:
         run: uv sync --frozen --no-binary-package zimtohrli
       - uses: actions/download-artifact@v8.0.1
         with:
-          name: package-${{ matrix.package }}-${{ matrix.target }}
+          name: ${{ matrix.channel == 'release' && 'release-' || '' }}package-${{ matrix.package }}-${{ matrix.target }}
           path: dist
       - name: Native smoke tests
         shell: bash
@@ -167,17 +159,37 @@ jobs:
         run: uv run --frozen python builder/baseline-test.py dist/*.tar.zst
       - uses: actions/upload-artifact@v7.0.1
         with:
-          name: report-${{ matrix.package }}-${{ matrix.target }}
+          name: ${{ matrix.channel == 'release' && 'release-' || '' }}report-${{ matrix.package }}-${{ matrix.target }}
           path: dist/*.report.json
+          if-no-files-found: error
+          overwrite: true
+
+  record-validation:
+    needs: [prepare, build, smoke]
+    if: >-
+      ${{ !cancelled() && needs.prepare.result == 'success' &&
+      needs.prepare.outputs.validation_fingerprint != '' &&
+      ((needs.prepare.outputs.has_packages == 'false' && needs.build.result == 'skipped' && needs.smoke.result == 'skipped') ||
+       (needs.build.result == 'success' && needs.smoke.result == 'success')) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Write validation marker
+        env:
+          FINGERPRINT: ${{ needs.prepare.outputs.validation_fingerprint }}
+        run: printf '%s\n' "$FINGERPRINT" > validation.txt
+      - uses: actions/upload-artifact@v7.0.1
+        with:
+          name: binary-validation-v1-${{ github.run_attempt }}-${{ needs.prepare.outputs.validation_fingerprint }}
+          path: validation.txt
           if-no-files-found: error
 
   publish:
     needs: [prepare, build, smoke]
-    if: needs.prepare.outputs.has_packages == 'true' && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish
+    if: success() && needs.prepare.outputs.has_releases == 'true' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     concurrency:
       group: binary-publishing
-      cancel-in-progress: false
+      queue: max
     permissions:
       contents: write
     steps:
@@ -186,6 +198,7 @@ jobs:
       - uses: actions/download-artifact@v8.0.1
         with:
           path: artifacts
+          pattern: release-*
       - env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}

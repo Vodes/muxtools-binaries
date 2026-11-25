@@ -9,7 +9,7 @@ published. A requested build always runs, even if that version is already publis
 2. Run `recipe.py` in the target's container or validated native builder.
 3. Check the staged files and create a `.tar.zst` archive with `.metadata.toml`.
 4. Test the archive on its target operating system.
-5. On a manual release run, publish all targets and update `versions.json`.
+5. On a release run, publish all targets and update `versions.json`.
 
 ## Responsibilities
 

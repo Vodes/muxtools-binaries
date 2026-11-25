@@ -5,7 +5,7 @@ from unittest.mock import Mock
 import httpx2
 import pytest
 
-from muxtools_binaries.artifacts import pack
+from muxtools_binaries.artifacts import pack, read_metadata
 from muxtools_binaries.checks import default_checks
 from muxtools_binaries.io import sha256
 from muxtools_binaries.release import (
@@ -19,9 +19,11 @@ from muxtools_binaries.release import (
 )
 
 
-def test_manual_release_gate():
+def test_release_gate():
     assert release_allowed("workflow_dispatch", "refs/heads/main", True)
-    assert not release_allowed("push", "refs/heads/main", True)
+    assert release_allowed("push", "refs/heads/main", True)
+    assert not release_allowed("push", "refs/heads/main", False)
+    assert not release_allowed("push", "refs/heads/topic", True)
     assert not release_allowed("pull_request", "refs/heads/main", True)
     assert not release_allowed("workflow_dispatch", "refs/heads/topic", True)
     assert not release_allowed("workflow_dispatch", "refs/heads/main", False)
@@ -113,6 +115,17 @@ def test_release_requires_complete_verified_artifacts(releases, package, broken)
         collect(releases, releases)
 
 
+def test_publisher_rejects_test_artifacts(releases, monkeypatch):
+    def test_metadata(stage):
+        data = read_metadata(stage)
+        data["provenance"]["channel"] = "test"
+        return data
+
+    monkeypatch.setattr("muxtools_binaries.release.read_metadata", test_metadata)
+    with pytest.raises(ValueError, match="Not a release artifact"):
+        collect(releases, releases)
+
+
 def test_release_rejects_checks_from_a_different_recipe(releases, package):
     recipe_path = releases / "packages" / package.name / "recipe.py"
     recipe_path.write_text(
@@ -142,8 +155,9 @@ def test_failed_upload_does_not_publish_catalog(releases, package, monkeypatch):
 
 
 @pytest.mark.parametrize("releases", ["", "A tool for café audio.\nIncludes an inspector."], indirect=True)
-def test_catalog_provides_and_nested_versions(releases, package, monkeypatch):
-    monkeypatch.setenv("GITHUB_EVENT_NAME", "workflow_dispatch")
+@pytest.mark.parametrize("event", ["workflow_dispatch", "push"])
+def test_catalog_provides_and_nested_versions(releases, package, event, monkeypatch):
+    monkeypatch.setenv("GITHUB_EVENT_NAME", event)
     monkeypatch.setenv("GITHUB_REF", "refs/heads/main")
     monkeypatch.setenv("GITHUB_RUN_ID", "fixture-run")
     previous = {"version_code": package.version_code - 1, "targets": {}}

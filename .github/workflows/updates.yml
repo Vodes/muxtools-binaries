@@ -51,7 +51,7 @@ jobs:
           branch: updates/${{ matrix.package }}
           title: Update ${{ matrix.package }} sources
           commit-message: Update ${{ matrix.package }} sources
-          body: Source pins and checksums updated by discovery. Test artifacts require review before manual publishing.
+          body: Source pins and checksums updated by discovery. Review the test artifacts before opting in to a release.
           add-paths: packages/${{ matrix.package }}/package.toml
       - name: Request test build
         if: steps.pr.outputs.pull-request-operation == 'created' || steps.pr.outputs.pull-request-operation == 'updated'

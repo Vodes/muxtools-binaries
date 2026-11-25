@@ -16,7 +16,7 @@ from .targets import BUILDERS, target_spec
 
 
 def release_allowed(event: str, ref: str, publish: bool) -> bool:
-    return event == "workflow_dispatch" and ref == "refs/heads/main" and publish is True
+    return event in ("workflow_dispatch", "push") and ref == "refs/heads/main" and publish is True
 
 
 type TargetArtifacts = dict[str, tuple[Path, dict[str, Any], str]]
@@ -382,7 +382,7 @@ def _publish_catalog(github: GitHub, catalog_release: dict[str, Any], catalog: d
 
 def publish(root: Path, artifacts: Path, repository: str, enabled: bool) -> None:
     if not release_allowed(os.getenv("GITHUB_EVENT_NAME", ""), os.getenv("GITHUB_REF", ""), enabled):
-        raise ValueError("Publishing requires manual dispatch on main with publish enabled")
+        raise ValueError("Publishing requires a main push or workflow dispatch with publish enabled")
     groups = collect(root, artifacts)
     github = GitHub(repository)
     catalog_release = github.release("catalog-v1")

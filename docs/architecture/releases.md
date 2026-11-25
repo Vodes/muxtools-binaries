@@ -1,8 +1,9 @@
 # Releases and updates
 
-Normal PR and push builds create test artifacts. Binary publication requires
-a manual workflow run on `main` with `publish` enabled. Update discovery never
-publishes binaries.
+PR builds create test artifacts. After a merge, **Build and test** skips repeat
+checks and test builds when a successful PR or update-discovery run covered the
+same Git tree and package targets. Direct pushes and merges without matching
+validation run the regular checks and test builds.
 
 ## Version identity
 
@@ -31,15 +32,25 @@ Before the first container-backed release, [qualify and adopt a builder](builder
 Its image must be available by registry digest. Native macOS releases instead
 require the recorded repository revision and native builder identity.
 
+To publish automatically, add the `release` label before merging a PR into
+`main`. Keep the label in place until **Build and test** reads it on the push.
+When a push can be attributed to that PR alone, the workflow builds and publishes
+new packages and packages with both a changed `version` and a higher
+`version_code`. Release builds and smoke tests use the merged commit. Direct
+pushes and pushes spanning multiple PRs use the manual release path.
+
+### Manual publishing
+
 1. Merge the package changes and adopted builder digest into `main`.
 2. Run **Build and test** manually on `main`.
 3. Set `packages` to a comma-separated list, or leave it empty to build all packages.
 4. Enable **publish**.
 5. Inspect the build, native test, and publication results.
 
-The publish checkbox defaults to off. The Python publisher also enforces the
-`workflow_dispatch`, `main`, and explicit publish gate. Normal binary build and
-test jobs use read-only repository permissions; only the publish job can write releases.
+The publish checkbox defaults to off. The Python publisher requires an explicitly
+enabled push or workflow dispatch on `main`. Build and test jobs use read-only
+repository permissions. The publish job writes releases using release artifacts
+from the same run.
 
 Every declared target needs an archive and a matching native smoke report before
 the package can upload. The publisher assembles and verifies each new package
@@ -62,7 +73,7 @@ The publisher uploads a versioned catalog snapshot before replacing the current
 `versions.json` asset on the `catalog-v1` release. GitHub asset replacement is
 not atomic, so consumers can briefly receive a 404.
 
-If replacement fails, rerun the same manual release. Completed package releases
+If replacement fails, rerun the release job. Completed package releases
 are reused, and the latest snapshot restores catalog state.
 
 After `versions.json` is verified and the catalog release is published, the
