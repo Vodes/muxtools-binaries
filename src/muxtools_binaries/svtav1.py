@@ -176,7 +176,6 @@ def checks(package: Package, target: str) -> CheckSuite:
             "--speed",
             "faster",
             "--webm",
-            "0",
         ]
     elif package.name == "svtav1-tritium":
         args += [
