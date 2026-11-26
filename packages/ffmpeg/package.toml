@@ -2,8 +2,8 @@ schema_version = 1
 name = "ffmpeg"
 # Upstream description: https://ffmpeg.org/
 description = "A complete, cross-platform solution to record, convert and stream audio and video."
-version = "9.0.2-r2"
-version_code = 4
+version = "9.1-r1"
+version_code = 5
 type = "external-build"
 provider = "Vodes/ffmpeg-mt"
 
@@ -11,37 +11,37 @@ provider = "Vodes/ffmpeg-mt"
 requirements = ["libgcc_s.so.1"]
 
 [targets.linux-x86_64.asset]
-url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.0.2-r2-nonfree/ffmpeg-9.0.2-linux-x86_64-nonfree.tar.zst"
-sha256 = "9bb9e30616482cc3eb5c804aa4d4dec2c7f6505250f8b50a45ffaf4022e11d15"
+url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.1-r1-nonfree/ffmpeg-9.1-linux-x86_64-nonfree.tar.zst"
+sha256 = "1849f0d7eb4a4fc83a473c2532abb844550a8652c56a4293c2b600332cee5906"
 format = "tar.zst"
 
 [targets.linux-arm64.runtime]
 requirements = ["libgcc_s.so.1"]
 
 [targets.linux-arm64.asset]
-url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.0.2-r2-nonfree/ffmpeg-9.0.2-linux-arm64-nonfree.tar.zst"
-sha256 = "e59fe7f64f53ceb6a4ae941bfc34de74260dba2232ef9c0a4640662b267c0ac5"
+url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.1-r1-nonfree/ffmpeg-9.1-linux-arm64-nonfree.tar.zst"
+sha256 = "aee1e983676eb43cf51f182313ddbf1702097a5bde7797a4fde7fb203d044ba6"
 format = "tar.zst"
 
 [targets.windows-x86_64.asset]
-url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.0.2-r2-nonfree/ffmpeg-9.0.2-windows-x86_64-nonfree.tar.zst"
-sha256 = "0526f559f73c7630e2e5fc0dc2338d59921c2e0a4a2a8a4dbfa392162645766a"
+url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.1-r1-nonfree/ffmpeg-9.1-windows-x86_64-nonfree.tar.zst"
+sha256 = "c92e80103c4ecd38c7403b7afdf2b2ced91787c6651758dcc79d3546b3fab95b"
 format = "tar.zst"
 
 [targets.windows-arm64]
 toolchain = "clang"  # we're not compiling this but we need this to not be default
 
 [targets.windows-arm64.asset]
-url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.0.2-r2-nonfree/ffmpeg-9.0.2-windows-arm64-nonfree.tar.zst"
-sha256 = "ee058d6f722c0e9beb71b8660ddd0dcae671d6b35ec7998b6be2d4898cb29fb2"
+url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.1-r1-nonfree/ffmpeg-9.1-windows-arm64-nonfree.tar.zst"
+sha256 = "e6ea583b2f927a661e3c6c32310eb0ad770775cec689f388aebc05a2cbbc9a0e"
 format = "tar.zst"
 
 [targets.macos-arm64]
 toolchain = "clang"  # we're not compiling this but we need this to not be default
 
 [targets.macos-arm64.asset]
-url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.0.2-r2-nonfree/ffmpeg-9.0.2-macos-arm64-nonfree.tar.zst"
-sha256 = "87fdb5f05952ec65af13a2342b2a83b511617fb3d1e5d3e45b1ca4a41bc1c723"
+url = "https://github.com/Vodes/ffmpeg-mt/releases/download/v9.1-r1-nonfree/ffmpeg-9.1-macos-arm64-nonfree.tar.zst"
+sha256 = "7d1f081349bf51eab63186976520fe21b5e261fcc82875fbaf90a2dc4be26cf9"
 format = "tar.zst"
 
 [executables]
